@@ -1,0 +1,1497 @@
+---
+title: "Impact of Early Repayment on Investor Return in a Peer-to-Peer Lending Dataset"
+author: "by Rebecca Mayer"
+date: "17 November 2015"
+output:
+  html_document:
+    theme: cerulean
+    toc: true
+    toc_depth: 2
+---
+
+# Project Overview
+
+In a 10-year dataset from peer-to-peer lender Prosper Loans, loans that failed within the first 10 months generated APYs ranging from -100% (total loss) to more than +75%. Why would both the best and worst performing loans be associated with the earliest closing dates? This analysis investigates the drivers of annualized percentage yield (APY) and uses real-world data to illustrate the basic intuition behind the results of early loan termination. Predicted yields based on financial formulas are compared with the data through exploratory visualizations, regression analysis and questions-and-answers. 
+
+This analysis was the final project for Udacity's Data Analysis With R course, completed in November 2015.
+
+
+# Data Prep
+
+Load libraries
+```{r Load libraries, message=F, warning=F, echo=F}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+library(GGally)
+library(scales)
+library(memisc)
+library(RColorBrewer)
+```
+
+Load data
+```{r Load data, message=F, warning=F, echo=F}
+pld <- read.csv('prosperLoanData.csv')
+```
+
+
+### Subsetting the data for analysis
+
+The original dataset was very large with 81 variables and 113,937 loan observations. I selected a subset of variables to consider in line with the assignment instructions. During the process of exploring the data, I realized there was a need to exclude some of the original observations in order to calculate a valid estimate of the base rate for lost loans. The refined dataset then became the subject of my exploration and analysis. 
+
+In order to have consistent data through all of the plots I am running the data adjustments at the beginning of this paper rather than implementing them in successive stages as they emerged in linear time. In the following sections I will explain the data cleaning decisions according to the original flow of logic in order to document the exploratory process.  
+
+```{r reduce data to completed loan cohorts, message=F, warning=F, echo=F}
+# select variables for further consideration
+pld <- subset(pld, select=c(Term, LoanStatus, ClosedDate, BorrowerRate, 
+    LenderYield, Occupation, EmploymentStatus, CreditScoreRangeUpper, 
+    FirstRecordedCreditLine, CurrentCreditLines, TotalCreditLinespast7years, 
+    CurrentDelinquencies, AmountDelinquent, DelinquenciesLast7Years, 
+    BankcardUtilization, DebtToIncomeRatio, IncomeRange, StatedMonthlyIncome,
+    LoanFirstDefaultedCycleNumber, LoanNumber, LoanOriginalAmount, 
+    LoanOriginationDate, LoanOriginationQuarter, MemberKey, LP_CustomerPayments,
+    LP_CustomerPrincipalPayments, LP_InterestandFees, LP_ServiceFees, 
+    LP_CollectionFees, LP_GrossPrincipalLoss, LP_NetPrincipalLoss, 
+    LP_NonPrincipalRecoverypayments, InvestmentFromFriendsAmount))
+
+# remove open loans
+pld$ClosedDate <- as.Date(pld$ClosedDate)
+pld <- subset(pld, !is.na(ClosedDate))
+
+# calculate expected end of term date
+pld$LoanOriginationDate <- as.Date(pld$LoanOriginationDate)
+pld$Term.EndDate <- pld$LoanOriginationDate + 30.4*pld$Term
+
+# subset data on completed loan cohorts
+pldCohort <- subset(pld, Term.EndDate < max(as.Date(pld$ClosedDate)))
+
+rm(pld)
+```
+
+# Univariate Plots  
+
+### Dataset Overview  
+
+Let's see the date distribution of loans  
+
+```{r closing date range, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=ClosedDate)) +
+  geom_histogram() +
+  ggtitle("Loan Closing Dates")
+```
+
+```{r loan origination dates, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=LoanOriginationDate)) +
+  geom_histogram() +
+  ggtitle("Loan Origination Dates")
+```
+
+Why is there a gap in loan originations around 2009?  
+  - Press reports indicate that the company had to shut down for 9 months in late 2008 due to SEC intervention  
+
+## Plots of Borrower Features  
+
+Creating LoanStatus.lost variable where:   
+* "Lost" = Defaulted and Chargedoff loans  
+* "Not Lost" = all other loan statuses  
+
+```{r Create LoanStatus.lost, message=F, warning=F, echo=F}
+cond <- pldCohort$LoanStatus=="Defaulted" | pldCohort$LoanStatus=="Chargedoff"
+labs <- c("Not Lost", "Lost")
+pldCohort$LoanStatus.lost <- factor(ifelse(cond, 1, 0), labels = labs)
+rm(list=c('cond', 'labs'))
+```
+
+
+```{r Borrower features I, message=F, warning=F, echo=F}
+levels(pldCohort$EmploymentStatus)[1]=NA
+
+ggplot(data=pldCohort, aes(x=EmploymentStatus, fill=LoanStatus.lost)) +
+  geom_bar(position='dodge') +
+  theme(axis.text.x  = element_text(angle=90, vjust=0.5, hjust=1)) +
+  scale_y_sqrt() +
+  guides(fill=FALSE) +
+  facet_wrap(~ LoanStatus.lost)
+```
+
+* little variation in reported employment status. `r percent_format()(nrow(subset(pldCohort, EmploymentStatus=="Employed" | EmploymentStatus=="Full-time"))/nrow(pldCohort))` report "employed" or "full-time".   
+***  
+
+
+```{r Borrower features II, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=IncomeRange, fill=LoanStatus.lost)) +
+  geom_bar(position='dodge') +
+  theme(axis.text.x  = element_text(angle=35))
+```
+
+* Most common income range is $25-50k   
+* Even at the highest income levels there are still a fair number of lost loans  
+
+### Borrower delinquencies
+Plotting delinquency variables including zero values on left, excluding zero values on right.   
+
+```{r Borrower features III, message=F, warning=F, echo=F}
+p1a = ggplot(data=pldCohort, aes(x=AmountDelinquent)) +
+  geom_histogram(binwidth=1000) +
+  scale_x_continuous(labels=comma, limits=c(0,15000)) +
+  scale_y_sqrt() +
+  theme(axis.text.x  = element_text(angle=35, size=8))
+p1b = ggplot(data=pldCohort, aes(x=AmountDelinquent)) +
+  geom_histogram() +
+  scale_x_log10(labels=comma) +
+  theme(axis.text.x  = element_text(angle=35, size=8))
+p2a = ggplot(data=pldCohort, aes(x=CurrentDelinquencies)) +
+  geom_histogram(binwidth=1) +
+  scale_x_continuous(limits=c(0, 20), breaks=seq(0, 20, 5)) +
+  scale_y_sqrt()
+p2b = ggplot(data=pldCohort, aes(x=CurrentDelinquencies)) +
+  geom_histogram() +
+  scale_x_log10() +
+  scale_y_sqrt()
+p3a = ggplot(data=pldCohort, aes(x=DelinquenciesLast7Years)) +
+  geom_histogram(binwidth=1) +
+  scale_x_continuous(limits=c(0,20)) +
+  scale_y_sqrt()
+p3b = ggplot(data=subset(pldCohort, DelinquenciesLast7Years != 0), aes(x=DelinquenciesLast7Years)) +
+  geom_histogram() +
+  scale_x_sqrt()
+
+grid.arrange(p1a, p1b, p2a, p2b, p3a, p3b, ncol=2)
+rm(list=c('p1a', 'p1b', 'p2a', 'p2b', 'p3a', 'p3b'))
+options("scipen"=100, digits=0)
+```
+
+Delinquency measures have extreme outliers. The mean amount delinquent is `r mean(pldCohort$AmountDelinquent, na.rm=TRUE)` while the max is `r max(pldCohort$AmountDelinquent, na.rm=TRUE)`.
+
+### Borrower income and credit    
+
+```{r, message=F, warning=F, echo=F}
+p4 = ggplot(data=pldCohort, aes(x=StatedMonthlyIncome)) +
+  geom_density(adjust=3, fill="grey") +
+  scale_x_continuous(limits=c(0, 25000))
+p5 = ggplot(data=pldCohort, aes(x=BankcardUtilization)) +
+  geom_density(adjust=0.5, fill="grey") +
+  xlim(0,1.5)
+options(digits=1)
+p6 = ggplot(data=pldCohort, aes(x=DebtToIncomeRatio)) +
+  geom_density(adjust=1, fill="grey") +
+  scale_x_continuous(limits=c(0, 1.2))
+p7 = ggplot(data=pldCohort, aes(x=as.Date(FirstRecordedCreditLine))) +
+  geom_density(adjust=3, fill="grey") +
+  theme(axis.text.x  = element_text(angle=35, size=8))
+p8 = ggplot(data=pldCohort, aes(x=CreditScoreRangeUpper)) +
+  geom_density(adjust=2, fill="grey") +
+  xlim(50, 950)
+p9 = ggplot(data=pldCohort, aes(x=CurrentCreditLines)) +
+  geom_density(adjust=2, fill="grey")
+
+grid.arrange(p4, p5, p6, p7, p8, p9)
+rm(list=c('p4', 'p5', 'p6', 'p7', 'p8', 'p9'))
+```
+
+- Monthly income, debt to income ratio, and current credit lines all have long right-hand tails.
+- FirstRecordedCreditLine could be a proxy for age. Many borrowers had their first credit lines in the 1990s so they are probably in their mid-30s to mid-40s.  
+
+```{r Occupation, message=F, warning=F, echo=F, fig.width=10, fig.height=7}
+# plot format based on http://stackoverflow.com/questions/12236160/ggplot-sum-percentages-for-each-facet-respect-fill
+ggplot(data=pldCohort, aes(x=Occupation)) +
+  geom_bar(aes(y = ..count../sum(..count..))) +
+  scale_y_sqrt(breaks=c(0, 0.01, 0.10, 0.25), name="Percent of Borrowers", labels=percent_format()) +
+  theme(axis.text.x  = element_text(angle=90, hjust=1, vjust=0.5, size=9, 
+                                    color="black")) +
+  ggtitle("Borrower Occupation")
+```
+
+- There are a large number of occupations with the most common being "other" so it may be difficult to draw firm conclusions on the traits of specific ones.    
+
+## Plots of Loan Features
+
+```{r Loan features, message=F, warning=F, echo=F}
+p11 = ggplot(data=pldCohort, aes(x=Term)) +
+  geom_histogram() +
+  scale_x_continuous(limits=c(0, 48), breaks=c(12,36)) +
+  scale_y_sqrt()
+p12 = ggplot(data=pldCohort, aes(x=BorrowerRate)) +
+  geom_histogram(binwidth=0.01) +
+  scale_x_continuous(labels=percent_format())
+p13 = ggplot(data=pldCohort, aes(x=InvestmentFromFriendsAmount)) +
+  geom_histogram() +
+  geom_vline(xintercept=mean(pldCohort$InvestmentFromFriendsAmount, na.rm=TRUE), color="red") +
+  scale_x_sqrt(limits=c(0, 10000), breaks=c(as.numeric(format(mean(pldCohort$InvestmentFromFriendsAmount, na.rm=TRUE), digits=0)), 2500, 5000, 7500, 10000)) +
+  scale_y_sqrt() +
+  theme(axis.text.x  = element_text(angle=35))
+p14 = ggplot(data=pldCohort, aes(x=LenderYield)) +
+  geom_histogram(binwidth=0.01)
+
+grid.arrange(p11, p12, p13, p14, ncol=2)
+rm(list=c("p11", "p12", "p13", "p14"))
+```
+
+* Vast majority of loans have 36-month term  
+* BorrowerRate and LenderYield have similar distribution (one is derived from the other)  
+* Investment from friends is negligible with mean = `r mean(pldCohort$InvestmentFromFriendsAmount, na.rm=TRUE)` and third quartile = `r quantile(pldCohort$InvestmentFromFriendsAmount, probs=0.75, na.rm=TRUE)`.
+
+```{r Loan original amount, , message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=LoanOriginalAmount, fill=LoanStatus)) +
+  geom_histogram(binwidth=5001) +
+  ggtitle("Original Loan Amount")
+```
+   
+Most loans are $5000 or less.   
+
+### Loan performance 
+
+```{r loans, message=F, warning=F, echo=F, fig.height=10}
+options(digits = 0)
+p18 = ggplot(data=pldCohort, aes(x=LoanFirstDefaultedCycleNumber)) +
+  geom_density(adjust=2) +
+  geom_vline(xintercept=median(pldCohort$LoanFirstDefaultedCycleNumber, 
+      na.rm=TRUE), color="blue", lwd=1)
+p19 = ggplot(data=pldCohort, aes(x=LP_CustomerPayments)) +
+  geom_histogram() +
+  scale_x_log10()
+p20 = ggplot(data=pldCohort, aes(x=LP_CustomerPrincipalPayments)) +
+  geom_histogram() +
+  scale_x_log10(labels = comma)
+p21 = ggplot(data=pldCohort, aes(x=LP_GrossPrincipalLoss)) +
+  geom_density(adjust=3) +
+  geom_vline(xintercept =
+    median(subset(pldCohort, LP_GrossPrincipalLoss > 0)$LP_GrossPrincipalLoss, 
+    na.rm=TRUE), color="blue", lwd=1) +
+  scale_x_log10(labels = comma, breaks =
+    median(subset(pldCohort, LP_GrossPrincipalLoss > 0)$LP_GrossPrincipalLoss, 
+    na.rm=TRUE))
+p22 = ggplot(data=pldCohort, aes(x=LP_NetPrincipalLoss)) +
+  geom_density(adjust=3) +
+  geom_vline(xintercept = 
+    median(subset(pldCohort, LP_NetPrincipalLoss > 0)$LP_NetPrincipalLoss, 
+    na.rm=TRUE), color="blue", lwd=1) +
+  scale_x_log10(breaks= 
+    median(subset(pldCohort, LP_NetPrincipalLoss > 0)$LP_NetPrincipalLoss, 
+    na.rm=TRUE), labels = comma)
+p23 = ggplot(data=pldCohort, aes(x=LP_NonPrincipalRecoverypayments)) +
+  geom_histogram() +
+  scale_x_log10(labels = comma)
+p24 = ggplot(data=pldCohort, aes(x=LP_InterestandFees)) +
+  geom_histogram() +
+  scale_x_log10(labels = comma)
+p25 = ggplot(data=pldCohort, aes(x=LP_ServiceFees)) +
+  geom_histogram() 
+p26 = ggplot(data=pldCohort, aes(x=LP_CollectionFees)) +
+  geom_histogram()
+
+grid.arrange(p18, p19, p20, p21, p22, p23, p24, p25, p26, ncol=2)
+rm(list=c( 'p18', 'p19', 'p20', 'p21', 'p22', 'p23', 'p24', 'p25', 'p26'))
+```
+
+* 50% of defaulting loans do so within the first `r median(pldCohort$LoanFirstDefaultedCycleNumber, na.rm=TRUE)` months
+* Not much principal is recovered by collections. Median Net Principal Loss is $2733 compared to $2779 Gross Principal Loss.
+* LP\_ServiceFees and LP\_CollectionFees are given as negative numbers 
+
+```{r loan status, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=LoanStatus)) +
+  geom_bar() +
+  ggtitle("Loan Status")
+```
+   
+- Not many cancelled loans, removing them from dataset  
+
+```{r exclude cancelled loans, message=F, warning=F, echo=F}
+pldCohort <- pldCohort[pldCohort$LoanStatus != "Cancelled",]
+```
+
+### Loan loss rate  
+
+Loan status plot shows a fair number of defaulted or charged off loans. How to calculate the base rate for lost loans?  
+- Including open loans could deflate the true loss rate because open loans may yet default.  
+- Including all closed loans could inflate the loss rate by including loans that failed before the end of their term while excluding non-failed loans from the same cohort that are still open.  
+- Approach chosen: calculate loss rate using completed loan cohorts based on expected completion date (LoanOriginationDate + Term) less than max data date (2014-03-10)   
+
+Eliminate open loans
+
+```{r remove open loans, message=F, warning=F, echo=F}
+# levels(pld$ClosedDate)[1] <- NA
+# pld$ClosedDate <- as.Date(pld$ClosedDate)
+# pld <- subset(pld, !is.na(ClosedDate))
+```
+
+Calculate expected term end date   
+
+```{r Loan.lossrate, message=F, warning=F, echo=F}
+# calculate expected end of term date
+  # pld$LoanOriginationDate <- as.Date(pld$LoanOriginationDate)
+  # pld$Term.EndDate <- pld$LoanOriginationDate + 30.4*pld$Term
+```
+
+Subset data on completed loan cohorts  
+
+```{r subset data on completed loan cohorts, message=F, warning=F, echo=F}
+# pldCohort <- subset(pld, Term.EndDate < "2014-03-10" & !is.na(ClosedDate))
+```
+
+Loan loss rate  
+
+```{r calculate loan loss rate, message=F, warning=F, echo=F}
+lossrate <- nrow(subset(pldCohort, LoanStatus == "Chargedoff" | LoanStatus == "Defaulted"))/nrow(pldCohort)
+```
+
+```{r Plot lossrate, message=F, warning=F, echo=F}
+loss = c(lossrate, 1-lossrate)
+fig <- barplot(loss, names.arg=c("Defaulted or charged off", "Completed"), 
+       ylim=c(0,0.85), main="Loan status for completed loan cohorts")
+text(x=fig, y=loss+0.03, labels = as.character(percent_format()(loss)))
+rm(list=c( 'fig', 'loss', 'lossrate'))
+```
+
+
+Results:  
+- Surprisingly high 31% of loans from completed cohorts are charged off or in default.  
+Curious: What proportion of loans closed before their expected end of term date? 
+`r percent_format()(nrow(subset(pldCohort, ClosedDate < Term.EndDate))/nrow(pldCohort))`
+
+I wonder if early repayment has any effect on investor return.   
+- creating AgeAtClosingDays and AgeAtClosingMos variables to show time to loan completion in days and months, respectively  
+
+```{r Age at Closing, message=F, warning=F, echo=F}
+pldCohort$AgeAtClosingDays <- as.numeric(pldCohort$ClosedDate - 
+                              pldCohort$LoanOriginationDate)
+pldCohort$AgeAtClosingMos <- pldCohort$AgeAtClosing/30.4
+```
+  
+```{r Early repayment stats, message=F, warning=F, echo=F}
+options(digits = 2)
+CohortStats <- pldCohort %>%
+  group_by(Term, LoanStatus.lost) %>%
+  summarise(MeanAgeAtClose = mean(AgeAtClosingMos),
+            MedianAgeAtClose = median(AgeAtClosingMos),
+            n = n())
+CohortStats 
+```
+  
+For 36-month loans:  
+- Lost loans fail early: median age at closing is only 16 months    
+- Most completed loans close early too: median age at closing is 30 months  
+
+```{r loan age plots, message=F, warning=F, echo=F}
+q2 <- ggplot(data=subset(pldCohort, Term==36), aes(x=AgeAtClosingMos, 
+        fill=LoanStatus.lost)) +
+  geom_histogram(binwidth=1) + 
+  ggtitle("36 Month Loans") + 
+  scale_x_continuous(limits=c(0, 43), breaks=seq(0, 42, 6), 
+        name="loan age at closing (months)") +
+  scale_y_sqrt() +
+  facet_grid(~ LoanStatus.lost)
+q3 <- ggplot(data=subset(pldCohort, Term==12), aes(x=AgeAtClosingMos, 
+        fill=LoanStatus.lost)) +
+  geom_histogram(binwidth=1) + 
+  ggtitle("12 Month Loans") + 
+  xlab("loan age at closing (months)") +
+  scale_y_sqrt() +
+  facet_grid(~ LoanStatus.lost)
+grid.arrange(q2, q3)
+rm(list=c("q2", "q3"))
+```
+
+Observations:  
+- The most common repayment month for completed loans is at the full term with the rest distributed fairly evenly across the earlier months.   
+- Both completed and lost loans have a number of loans that continue beyond the end of the official loan term. These loans are probably marginal performers, with some managing to pay off the loan in the extra time and others failing.   
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+
+* Original dataset comprises 81 variables and 113,937 loan observations  
+* Refined dataset comprises 34 variables and 39,155 observations  
+* Seven variables are factors and two are dates
+* Loan term can be 12 or 36 months  
+* Loan amounts range from $1000 - $25,000  
+* 75% of loans are $7,500 or less  
+* 31% of loans are charged off or in default  
+* Loan closing dates range from `r min(as.Date(pldCohort$ClosedDate), na.rm=TRUE)` to `r max(as.Date(pldCohort$ClosedDate), na.rm=TRUE)` 
+* Mean borrower rate = `r 100*mean(pldCohort$BorrowerRate, na.rm=TRUE)`%     
+
+### What is/are the main feature(s) of interest in your dataset?
+
+I am intrigued by the high proportion of loans that close early and am focusing on the impact of early loan closing on investor return.
+
+Features involved in investor return: 
++ LoanOriginalAmount
++ LoanStatus
++ LP_ServiceFees
++ LP_CollectionFees
++ LP_CustomerPayments
++ LP_CustomerPrincipalPayments
++ LP_GrossPrincipalLoss
++ LP_InterestandFees
++ LP_NetPrincipalLoss
++ LP_NonPrincipalRecoverypayments
+
+Features involved in early repayment:
++ LoanOriginationDate
++ Term
++ ClosedDate
+
+Features involved in expected yield:
++ LenderYield
++ BorrowerRate
+
+
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+
+It would be interesting to look for borrower characteristics that predict early repayment. The features I will examine are: Occupation, EmploymentStatus, CreditScoreRangeUpper, FirstRecordedCreditLine, CurrentCreditLines, CurrentDelinquencies, IncomeRange.
+
+### Did you create any new variables from existing variables in the dataset?
+
+New Variable  | Type | Definition
+------------- | ---- | ------------
+LoanStatus.lost | Factor | "Lost" = defaulted or charged-off loan; "Not Lost" = all other loan statuses
+Term.EndDate  | Date | Expected end date of loan based on origination date and term
+AgeAtClosingDays | num | Age of loan at closing date (days)
+AgeAtClosingMos | num | Age of loan at closing date (months)
+
+After some data cleaning in the next section these additional variables will be derived:  
+
+New Variable  | Type | Definition
+------------- | ---- | ------------
+PrincipalGap | num | Difference between original loan amount and the sum of customer principal payments + gross principal loss
+RecoveredPrincipal | num | Difference between gross principal loss and net principal loss
+InvestorGain | num | Difference between investor's income and expenses from loan. May be positive or negative.
+InvestorReturn | num | InvestorGain as a percentage of average daily principal balance
+InvestorAPY | num | Investor annual percentage yield (APY)
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+
+Many features were skewed right because they represented real quantities with a large number of zero values. For example, most people had no delinquencies in the past 7 years, but a few had more than 10. I used log or sqrt transformations on these variables to condense and normalize the distributions for plotting. Zero values become 'NaN' in R when transformed by logarithm, so these values do not appear in the resulting plots. If the number of zero values in the data was small, I used a sqrt transformation so as to keep them in the plot. If the data was dominated by zero values, I used a log transformation.  
+
+# Bivariate Plots
+
+In order to examine the effect of early repayment on investor return, I first need to derive return-related metrics from the loan data.
+
+## Calculating Investor Return  
+
+The main benchmark of loan performance is annual percentage yield (APY). APY is used because it allows comparisons of different investments by standardizing the return with respect to time. In calculating APY I referred to the following definitions:   
+[Gain](http://www.investopedia.com/terms/g/gain.asp) from Investopedia   
+[Return](https://www.prosper.com/help/topics/how-to-read-a-loan-listing/) according to Prosper Loan definition   
+[Annual Percentage Yield (APY)](http://www.investopedia.com/terms/a/apy.asp) from Investopedia
+
+The dataset's loan performance (LP) variables provide sufficient detail to estimate gain, return, and APY for each loan observation. 
+
+Before I calculate the new variables, I will examine bivariate plots of LP variables to make sure that the data tally up properly.  
+
+### Customer payments before charge-off
+
+```{r Customer payments, message=F, warning=F, echo=F, fig.width=7, fig.height=3}
+ggplot(data=pldCohort, aes(x=(LP_CustomerPrincipalPayments + LP_InterestandFees)/LP_CustomerPayments)) +
+  geom_histogram(binwidth=.05, color="orange", fill="white", origin=0.925) +
+  scale_x_continuous(labels=percent_format(), limits=c(0.925,1.0825), breaks=c(0.95, 1, 1.05), name="Pre-Chargeoff Principal, Interest and Fee Payments as Percent of Total") +
+  scale_y_continuous(name="number of loan observations") +
+  theme(axis.text.y = element_text(size=10, color="dark blue")) +
+  ggtitle("Check Sum of Pre-Chargeoff Customer Payments") 
+```
+
+Total customer payment equals the sum of customer principal payments plus interest and fees, as expected.  
+
+### Principal payments and losses  
+
+The sum of pre-chargeoff principal payments and gross principal loss should equal 100% of the original loan amount.   
+
+```{r Gross principal loss gap I, message=F, warning=F, echo=F}
+# custom axis rescaling function adapted from http://www.r-bloggers.com/creating-a-scale-transformation/
+fifthroot_trans <- function(x) { 
+  trans_new("fifthroot", transform = function(y) {abs(y)^(1/5)},
+            inverse = function(z) {abs(z)^5})}
+
+ggplot(data=pldCohort, aes(x=(LP_CustomerPrincipalPayments
+    + LP_GrossPrincipalLoss)/LoanOriginalAmount)) +
+  geom_histogram(binwidth=.2, color="orange", fill="white", origin = -0.1) +
+  scale_x_continuous(labels=percent_format()) +
+  theme(axis.text.y = element_text(size=10, color="dark blue"), axis.title.y = element_blank()) +
+  scale_y_continuous(trans=fifthroot_trans(), breaks=c(1, 10, 100, 1000, 10000), name="number of loans") +
+  coord_flip() +
+  ggtitle("Principal Payments + Gross Principal Loss \n as Percent of Original Loan Amount")
+```
+
+* This plot shows that some loans don't tally properly: there is a difference between the original loan principal and the principal flows recorded during the payback period.  
+* Most totals are within +/-10% of the original loan amount but some tens of observations fall outside that range.  
+
+Let's look at the principal gap separated out by loan status:  
+
+```{r Gross principal loss gap, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=(LP_CustomerPrincipalPayments
+    + LP_GrossPrincipalLoss)/LoanOriginalAmount)) +
+  geom_histogram(binwidth=.2, color="orange", fill="white", origin = -0.1) +
+  scale_x_continuous(labels=percent_format()) +
+  theme(axis.text.y = element_text(size=10, color="dark blue"), axis.title.y = element_blank()) +
+  scale_y_continuous(trans=fifthroot_trans(), breaks=c(1, 10, 100, 1000, 10000), name="number of loans") +
+  coord_flip() +
+  facet_wrap(~LoanStatus.lost) +
+  ggtitle("Principal Payments + Gross Principal Loss \n as Percent of Original Loan Amount")
+```
+
+The data diverges for both types of loans. Let's drill down into the LP_GrossPrincipalLoss variable to look for clues.  
+
+Expected patterns:   
+* fully repaid loans (Not Lost) ==> gross principal loss = zero  
+* charged off loans (Lost) ==> gross principal loss > 0  
+
+```{r GPL stats, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(y=(LP_GrossPrincipalLoss), x=format(ClosedDate, "%Y"))) +
+  geom_boxplot() +
+  scale_x_discrete(name="Year of Loan Closing") +
+  scale_y_continuous(name="Gross Principal Loss") +
+  facet_wrap(~LoanStatus.lost) +
+  ggtitle("Gross Principal Loss by Loan Status")
+```
+
+For fully repaid loans, GrossPrincipalLoss is zero as it should be. For lost loans, there's no reference point against which to measure the accuracy of GrossPrincipalLoss. 
+
+Let's look at CustomerPrincipalPayments next.  
+
+For fully repaid loans, customer principal payments should equal the original loan amount. For lost loans, customer principal should be less than the original loan amount.  
+
+```{r, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=LP_CustomerPrincipalPayments/LoanOriginalAmount)) +
+  geom_histogram(binwidth=.02, color="orange", fill="white") +
+  scale_x_continuous(labels=percent_format()) +
+  theme(axis.text.y = element_text(size=10, color="dark blue"), axis.title.y = element_blank()) +
+  scale_y_continuous(trans=fifthroot_trans(), breaks=c(1, 10, 100, 1000, 10000), name="number of loans") +
+  coord_flip() +
+  facet_wrap(~LoanStatus.lost) +
+  ggtitle("Customer Principal Payments as % of Original Loan Amount")
+```
+  
+* In this case the data for lost loans looks pretty good: customer principal payments are less than or equal to 102% of loans for all observations 
+* The Not Lost plot shows many data points where customer principal payments are underreported and a few where they are overreported. Because principal payments are submitted over many months, there are many opportunities for errors to get into the payments data. 
+
+Let's look at the Principal Gap before making any decisions about how to clean the data. 
+
+### Distribution of Principal Gap Errors
+
+First I will create a new variable called PrincipalGap as the difference between the original loan amount and the sum of customer principal payments + gross principal loss. When the original loan amount exceeds the payment total, the gap will be positive. When the original loan amount is less than the payment total, the gap is negative. 
+
+```{r Principal gap, message=F, warning=F, echo=F}
+pldCohort$PrincipalGap <- pldCohort$LoanOriginalAmount - 
+  pldCohort$LP_CustomerPrincipalPayments - pldCohort$LP_GrossPrincipalLoss
+
+summary(pldCohort$PrincipalGap)
+```
+
+The principal gap takes both positive and negative values.  Let's plot the gaps.   
+
+```{r Principal gap errors, message=F, warning=F, echo=F}
+p1 <- ggplot(data=subset(pldCohort, abs(PrincipalGap) > 0)) +
+  geom_histogram(aes(x=PrincipalGap/LoanOriginalAmount, fill=LoanStatus.lost), 
+    binwidth=0.01) +
+  scale_x_continuous(limits=c(-0.20, 0.20), breaks=seq(-0.20, 0.20, 0.02), 
+    labels=percent_format(), name="Principal Gap as a Percentage of Original 
+    Loan Amount") +
+  theme(axis.text.x = element_text(size=6)) +
+  scale_y_sqrt()
+
+p2 <- ggplot(data=subset(pldCohort, abs(PrincipalGap) > 1)) +
+  geom_histogram(aes(x=PrincipalGap, fill=LoanStatus.lost), binwidth=20) +
+  scale_x_continuous(limits=c(-5000, 5000), name="Distribution of Principal 
+    Gap") +
+  scale_y_sqrt(limits=c(0, 1000))
+
+grid.arrange(p1, p2)
+```
+
+```{r, message=F, warning=F, echo=F}
+rm(list=c('p1', 'p2'))
+```
+
+There are `r nrow(pldCohort[abs(pldCohort$PrincipalGap) > 0, ])` loans with a Principal Gap but only `r nrow(pldCohort[abs(pldCohort$PrincipalGap) > 0.01*pldCohort$LoanOriginalAmount, ])` where the gap is greater than 1% of the original loan amount. 
+
+Are there any visible correlations between principal gap and early repayment?  
+
+```{r principal gap over time, message=F, warning=F, echo=F}
+ggplot(data=subset(pldCohort, abs(PrincipalGap) > 0), aes(x=AgeAtClosingMos, 
+    y=PrincipalGap, color=LoanStatus)) +
+  geom_point(alpha=0.5)
+```
+
+No pattern that I can see. Dropping observations with large principal gaps should not affect my analysis of the effects of early repayment.
+
+### Cleaning the payments data
+
+In order to improve the validity of the data without losing too many data points, I decided to take two cleaning steps:  
+1. Drop all data points where Principal Gap > 1% of the original loan amount  
+2. Adjust customer principal payments to eliminate the gap for the remaining observations  
+
+```{r clean CustomerPrincipalPayments, message=F, warning=F, echo=F}
+pldCohort <- subset(pldCohort, abs(PrincipalGap) <= 0.01*LoanOriginalAmount)
+
+pldCohort$adjCustomerPrincipalPayments <- 
+  pldCohort$LP_CustomerPrincipalPayments + pldCohort$PrincipalGap
+```
+
+Check for remaining principal gap in cleaned data.   
+
+```{r, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=(adjCustomerPrincipalPayments
+    + LP_GrossPrincipalLoss)/LoanOriginalAmount)) +
+  geom_histogram(binwidth=.02, color="orange", fill="white", origin = 0) +
+  scale_x_continuous(labels=percent_format()) +
+  theme(axis.text.y = element_text(size=10, color="dark blue"), axis.title.y = element_blank()) +
+  scale_y_continuous(trans=fifthroot_trans(), breaks=c(1, 10, 100, 1000, 10000), name="number of loans") +
+  coord_flip() +
+  facet_wrap(~LoanStatus.lost) +
+  ggtitle("Principal Payments + Gross Principal Loss \n as Percent of Original Loan Amount")
+
+```
+
+Elimination of principal gap confirmed.
+
+Now let's check gross and net principal loss. NetPrincipalLoss should always be greater than or equal to zero, and can't exceed 100% of GrossPrincipalLoss.   
+
+```{r GrossPrincipalLoss NetPrincipalLoss, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=LP_NetPrincipalLoss/LP_GrossPrincipalLoss)) +
+  geom_histogram(binwidth=.02, color="orange", fill="white") +
+  scale_x_continuous(labels=percent_format(), breaks=c(-5, -2.5, 0, 1)) +
+  theme(axis.text.y = element_text(size=10, color="dark blue"), axis.title.y = element_blank()) +
+  scale_y_continuous(trans=fifthroot_trans(), breaks=c(1, 10, 100, 1000, 10000), name="number of loans") +
+  coord_flip() +
+  facet_wrap(~LoanStatus.lost) +
+  ggtitle("Net loss as a percentage of gross loss")
+```
+
+The "Not Lost" plot is blank because there are no principal losses for fully repaid loans. The "Lost" plot shows that net principal loss is generally between 0% and 100% of gross principal loss, as expected. But, there are still a number of observations outside of these bounds:  
+- `r nrow(subset(pldCohort, LP_GrossPrincipalLoss < LP_NetPrincipalLoss))` observations where net loss is greater than gross loss  
+- `r nrow(subset(pldCohort, LP_NetPrincipalLoss < 0))` observations where net loss is given as a negative number  
+- `r nrow(subset(pldCohort, LP_GrossPrincipalLoss < 0))` observations where gross loss is given as a negative number  
+
+```{r, message=F, warning=F, echo=F}
+ggplot(data=subset(pldCohort, LP_GrossPrincipalLoss < LP_NetPrincipalLoss), 
+    aes(x=LP_NetPrincipalLoss - LP_GrossPrincipalLoss)) +
+  geom_histogram(binwidth=1) +
+  scale_y_continuous(trans=fifthroot_trans(), breaks=c(1, 10, 1000)) +
+  ggtitle("Observations where net loss > gross loss")
+```
+
+The vast majority of the differences are less than $1 - rounding errors. I will drop points with differences more than $1 and adjust the remainder to eliminate negative differences.  
+
+```{r adjNetPrincipalLoss, message=F, warning=F, echo=F}
+pldCohort <- subset(pldCohort, LP_GrossPrincipalLoss >= 0 & LP_NetPrincipalLoss >=0)
+pldCohort <- subset(pldCohort, LP_GrossPrincipalLoss - 
+    LP_NetPrincipalLoss >= -1)
+pldCohort$adjNetPrincipalLoss <- ifelse(pldCohort$LP_GrossPrincipalLoss - 
+    pldCohort$LP_NetPrincipalLoss < 0, pldCohort$LP_GrossPrincipalLoss,
+    pldCohort$LP_NetPrincipalLoss)
+```
+
+Now let's calculate RecoveredPrincipal as the difference between net and gross principal loss.  
+
+```{r Recovered principal, message=F, warning=F, echo=F}
+pldCohort$RecoveredPrincipal <- pldCohort$LP_GrossPrincipalLoss - 
+  pldCohort$adjNetPrincipalLoss
+summary(pldCohort$RecoveredPrincipal)
+```
+
+#### Final check for well-behaved payments and loss data.
+
+```{r Final check cleaned data, message=F, warning=F, echo=F}
+# re-plot with cleaned data
+r1 <- ggplot(data=pldCohort, aes(x=(adjCustomerPrincipalPayments + 
+    RecoveredPrincipal + adjNetPrincipalLoss), y=LoanOriginalAmount)) +
+  geom_point(alpha=0.8, color="blue") +
+  geom_abline(intercept=0, slope=1, color="black") +
+  facet_wrap(~ LoanStatus.lost)
+
+r2 <- ggplot(data=pldCohort, aes(y=LoanOriginalAmount, x= 
+    (adjCustomerPrincipalPayments + LP_GrossPrincipalLoss))) +
+  geom_point(alpha=0.8, color="orange") +
+  geom_abline(intercept=0, slope=1, color="black") +
+  facet_wrap(~ LoanStatus.lost)
+
+grid.arrange(r1, r2)
+```
+
+```{r, message=F, warning=F, echo=F}
+rm(list=c('r1', 'r2'))
+```
+
+
+Now that the principal loss data has been cleaned, investor return can be calculated.  
+
+
+```{r InvestorGain, message=F, warning=F, echo=F}
+# InvestorGain = Customer payments + recoveries minus investment and fees
+# Recall that LP_ServiceFees and LP_CollectionFees are negative numbers
+pldCohort$InvestorGain <- pldCohort$LP_CustomerPayments + 
+  pldCohort$RecoveredPrincipal + pldCohort$LP_NonPrincipalRecoverypayments -
+  pldCohort$LoanOriginalAmount + pldCohort$LP_ServiceFees + 
+  pldCohort$LP_CollectionFees
+```
+
+Prosper's [methodology for calculating return](https://www.prosper.com/help/topics/how-to-read-a-loan-listing/) states: 
+To calculate the Return, all payments received on borrower loans, net of principal repayment, credit losses, and servicing costs for such loans, are aggregated and then divided by the average daily amount of aggregate outstanding principal.   
+
+To use Prosper's definition of return I need to estimate the average daily principal balance for each loan. This won't be 100% accurate for loans with late payments, but it's a reasonable approximation based on the available data. I'll discuss the drawbacks of using this definition in the question section.   
+
+```{r Avg.Daily.Balance function, message=F, warning=F, echo=F}
+# Inputs: vector (P, r, n, t) where
+# P = loan amt, r = annual interest rate, n = loan term (months), 
+# t = loan age at repayment (days)
+# Outputs: average daily principal balance
+
+Avg.Daily.Balance <- function(v)
+  {
+  principal <- v[1]
+  r <- v[2]
+  n <- v[3]
+  t <- v[4]
+  cumulative.principal <- 0
+  # A = monthly payment
+  A <- principal*(r/12*(1+r/12)^n)/((1+r/12)^n-1)
+  # no. of whole months before repayment
+  m <- trunc(t/30.4)
+  # calculate monthly accruals
+  if (m > 0) {
+    for (i in 1:m) {
+      interest <- round(r/12*principal, 2)
+      cumulative.principal <- cumulative.principal + principal*30.4 
+      principal <- principal - (A - interest) }
+  }
+  # number of days in last fractional month before repayment
+  d <- floor(t%%30.4)
+  # accruals from last fractional month
+  interest <- round(r/365*principal*d, 2)
+  cumulative.principal <- cumulative.principal + principal*d
+  # average daily principal balance
+  principal.avg <- cumulative.principal/t
+}
+```
+
+Create AvgPrincipal and InvestorReturn variables   
+
+```{r Investor return, message=F, warning=F, echo=F}
+pldCohort$AvgPrincipal  <- (apply(subset(pldCohort, select=c(LoanOriginalAmount, 
+  BorrowerRate, Term, AgeAtClosingDays)), 1, Avg.Daily.Balance))
+
+pldCohort$InvestorReturn <- 
+  pldCohort$InvestorGain/pldCohort$AvgPrincipal
+```
+
+Calculate InvestorAPY  
+
+```{r InvestorAPY, message=F, warning=F, echo=F}
+# Annual percentage yield (APY)
+pldCohort$InvestorAPY <- 
+  (pldCohort$InvestorReturn + 1)^(365/pldCohort$AgeAtClosingDays) - 1
+```
+
+
+## Plots of Investor Return
+
+Because there are relatively few 12-month loans in the data, I am going to remove them to simplify the analysis.
+
+```{r remove 12-month loans, message=F, warning=F, echo=F}
+pldCohort <- subset(pldCohort, Term==36)
+```
+
+```{r Investor Return v gain, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=InvestorGain, y=InvestorReturn, 
+    color=LoanStatus.lost)) +
+  geom_point() +
+  ggtitle("Investor Gain vs Return")
+```
+
+Create BorrowerRate buckets   
+
+```{r BorrowerRate buckets, message=F, warning=F, echo=F}
+# BorrowerRate buckets
+options(digits = 4)
+labs <- c("0-12%", "12-18%", "18-25%", "25-50%")
+pldCohort$BorrowerRate.bucket <- cut(pldCohort$BorrowerRate, 
+  breaks=c(-0.1,
+    quantile(pldCohort$BorrowerRate, 0.25, na.rm=TRUE), 
+    quantile(pldCohort$BorrowerRate, 0.50, na.rm=TRUE), 
+    quantile(pldCohort$BorrowerRate, 0.75, na.rm=TRUE), 
+    max(pldCohort$BorrowerRate, na.rm=TRUE)), 
+  right=TRUE, ordered=TRUE, labels=labs)
+rm(labs)
+```
+
+```{r Investor gain by borrower rate, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(x=InvestorGain, fill=BorrowerRate.bucket)) +
+  geom_histogram(binwidth=250) +
+  scale_y_sqrt() +
+  theme(axis.text.x  = element_text(angle=35)) +
+  facet_wrap(~LoanStatus.lost, scales="free") +
+  ggtitle("Investor Gain from Lost and Completed Loans")
+
+```
+
+While most lost loans result in losses to the investor they show a range of outcomes from more than $20,000 lost to gains of more than $5000. Both plots show a steep exponentially declining curve for positive gains. Negative gains (losses) also look to be declining exponentially, but not as steeply as positive gains.  
+
+
+### Investor APY vs Loan Age at Closing
+
+```{r InvestorAPY vs AgeAtClosingMos not lost, message=F, warning=F, echo=F}
+ggplot(data=subset(pldCohort, LoanStatus.lost=="Not Lost"), aes(y=InvestorAPY, 
+    x=AgeAtClosingMos, color=BorrowerRate.bucket)) +
+  geom_point(alpha=1) +
+  scale_color_brewer() +
+  scale_y_continuous(limits=c(-0.1, 0.75), labels=percent_format()) +
+  scale_x_continuous(name="Months since loan origination at time of closing") +
+  stat_smooth(color="blue", na.rm=FALSE) +
+  ggtitle("Investor APY vs Early Repayment for Completed Loans")
+```
+   
+Observations:   
+* InvestorAPY is highly stratified by BorrowerRate within completed loans   
+* APY range narrows as loan age increases   
+
+
+```{r InvestorAPY vs AgeAtClosingMos lost, message=F, warning=F, echo=F}
+ggplot(data=subset(pldCohort, LoanStatus.lost=="Lost"), aes(y=InvestorAPY, 
+    x=AgeAtClosingMos, color=BorrowerRate.bucket)) +
+  geom_point(alpha=1) +
+  scale_color_brewer() +
+  scale_y_continuous(limits=c(-1.1, 1), labels=percent_format()) +
+  scale_x_continuous(name="Months since loan origination at time of closing") +
+  stat_smooth(color="blue", na.rm=FALSE) +
+  ggtitle("Investor APY vs Early Repayment for Lost Loans")
+```
+
+* In a somewhat counterintuitive finding, some of the highest APYs for both completed and charged-off loans are achieved by loans that close in the first 10-20 months.  
+*  Another striking thing about this plot is how the range of returns for lost loans varies from total loss (-100%) to nearly 100%. How can returns be so high for loans where the principal is not completely repaid? I suspect that will be related to the interaction of multiple factors, so I will look into that question further in the multivariable section.   
+
+```{r InvestorReturn vs. LenderYield 1, message=F, warning=F, echo=F}
+ggplot(data=pldCohort, aes(y=InvestorReturn, x=LenderYield, 
+    color=BorrowerRate.bucket)) +
+  geom_point(alpha=0.8) +
+  stat_smooth(color="blue") +
+  facet_wrap(~ LoanStatus.lost) +
+  ggtitle("InvestorReturn vs LenderYield")
+```
+Observations:  
+* By definition, LenderYield is equal to the interest rate on the loan less the servicing fee. So this plot shows the relationship between borrower interest rate and investor return, with an offset based on the size of the loan servicing fee.   
+* The relationship between LenderYield and InvestorReturn is not very straightforward.  The scatterplots have a roughly triangular shape bounded on top by an upward-sloping line. This shows that for the same initial LenderYield, investor return can take on any of many values up to a certain maximum. Could this be related to the returns from different loan amounts associated with a given borrower interest rate?   
+
+```{r age at closing buckets, message=F, warning=F, echo=F}
+labs <- c("0-9", "9-18", "18-27", "27-36", ">36")
+pldCohort$AgeAtClosing.bucket <- cut(pldCohort$AgeAtClosingMos, 
+  breaks=c(0, 9, 18, 27, 36, 100), right=TRUE, ordered=TRUE, labels=labs)
+rm(labs)
+```
+
+```{r InvestorAPY vs. LenderYield 2, message=F, warning=F, echo=F}
+# InvestorAPY vs. LenderYield
+ggplot(data=pldCohort, aes(y=InvestorAPY, x=LenderYield, 
+    color=AgeAtClosing.bucket)) +
+  geom_point(alpha=0.8) +
+  scale_y_continuous(limits=c(-1,1)) +
+  scale_x_continuous() +
+  facet_wrap(~ LoanStatus.lost) +
+  ggtitle("InvestorAPY vs LenderYield")
+```
+Observations:  
+* Completed and lost loans seem to reflect opposite effects of early repayment. Among completed loans, early closing loans have the highest APY whereas among lost loans they have the lowest.   
+
+## Plots Against Borrower Characteristics
+
+### Completed loans  
+
+```{r ggpairs1, message=F, warning=F, echo=F, fig.width=8, fig.height=8}
+# Ggally borrower characteristics against AgeAtClosingMos
+pairs1 <- subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+    select=c(AgeAtClosingMos, InvestorAPY, EmploymentStatus, 
+             CreditScoreRangeUpper, FirstRecordedCreditLine))
+pairs1$FirstRecordedCreditLine <- as.numeric(pairs1$FirstRecordedCreditLine)
+ggpairs(pairs1, columnLabels = c("LoanAge", "APY", "Employment", "CreditScore", 
+                                 "FirstCredit")) + 
+  ggplot2::theme_linedraw() +
+  theme(axis.text=element_blank())
+```
+  
+Observations:  
+* InvestorAPY has very low correlation with AgeAtClosingMos (-0.037).   
+* FirstRecordedCreditLine needs to be converted from factor to numeric before running ggpairs.   Otherwise with >11,000 factor levels it will take a long time!   
+* CreditScoreRangeUpper has a high negative correlation with APY of -0.514.   
+
+```{r ggpairs2, message=F, warning=F, echo=F, fig.width=8, fig.height=8}
+pairs2 <- subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+    select=c(AgeAtClosingMos, InvestorAPY, IncomeRange, DebtToIncomeRatio))
+ggpairs(pairs2, columnLabels = c("LoanAge", "APY", "Income", "Debt/Inc")) + 
+  ggplot2::theme_linedraw() +
+  theme(axis.text=element_blank())
+```
+   
+Observations:   
+* Not seeing a lot of variation in the boxplot of APY by Income bracket, at least at this scale.  
+* Debt-to-Income ratio is not highly correlated with either Loan Age or APY.  
+
+```{r ggpairs3, message=F, warning=F, echo=F, fig.width=8, fig.height=8}
+pairs3 <- subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+    select=c(AgeAtClosingMos, InvestorAPY, CurrentDelinquencies, 
+             AmountDelinquent, DelinquenciesLast7Years))
+ggpairs(pairs3, columnLabels = c("LoanAge", "APY", "CurrentDelinq", "AmtDelinq", 
+                                 "Last7YrsDelinq")) + 
+  ggplot2::theme_linedraw() +
+  theme(axis.text=element_blank())
+```
+   
+Observations:  
+  * Both current delinquencies and delinquencies over last 7 years have a positive correlation with APY of about 0.2. I suspect that is driven by the higher interest rates given to borrowers with poorer credit histories. Since the dataset for these plots excludes defaulted loans, the true correlation of delinquencies with loan performance is distorted.    
+
+```{r, message=F, warning=F, echo=F}
+rm(list=c("pairs1", "pairs2", "pairs3"))
+```
+
+
+The Occupation factor has too many levels to create a readable plot in ggpairs, so I am examining it in a separate boxplot.   
+```{r Occupation correlations Not Lost, message=F, warning=F, echo=F, fig.width=10, fig.height=8}
+# boxplot of AgeAtClosingMos vs Occupation for completed 36-month loans
+ggplot(data=pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+       aes(x=Occupation, y=AgeAtClosingMos)) +
+  geom_boxplot() +
+  theme(axis.text.x  = element_text(angle=90, vjust=0.5, hjust=1, size=10)) +
+  ggtitle("Boxplots of Loan Age at Closing by Occupation")
+
+repay.by.occ <- pldCohort[pldCohort$LoanStatus.lost=="Not Lost",] %>%
+  group_by(Occupation) %>%
+  summarise(n_unique = length(unique(MemberKey)),
+            median_loan_repayment_month = median(AgeAtClosingMos),
+            mean_loan_repayment_month = mean(AgeAtClosingMos)) %>%
+  arrange(nchar(as.character(Occupation)))
+
+ggplot(data=repay.by.occ) +
+  geom_point(aes(x=Occupation, y=median_loan_repayment_month)) +
+  geom_text(data=subset(repay.by.occ, median_loan_repayment_month < 23 
+                        | median_loan_repayment_month > 35 
+                        | nchar(as.character(Occupation)) < 8), 
+            aes(x=Occupation, y=median_loan_repayment_month, label=Occupation), 
+            size=4, hjust=0.5, vjust=1.5, color="blue") +
+  geom_text(data=subset(repay.by.occ, median_loan_repayment_month < 23 
+                        | median_loan_repayment_month > 35 
+                        | nchar(as.character(Occupation)) < 8), 
+            aes(x=Occupation, y=median_loan_repayment_month, label=n_unique), 
+            size=4, hjust=0.5, vjust=3) +
+  theme(axis.text.x  = element_blank(), axis.title.x  = element_blank()) +
+  scale_y_continuous(breaks=seq(0, 42, 6), name="Median repayment month") +
+  ggtitle("Completed loans: Occupation by median loan repayment month 
+with number of borrowers in sample")
+
+rm(repay.by.occ)
+```
+  
+* Occupations most associated with early repayment are Investor and Homemaker (by median age of loan repayment)  
+* Sample size is very small in both cases: only 21 unique Investors and 31 unique Homemakers
+* Military personnel (enlisted and officers) also have a tendency to repay early
+* Occupations least associated with early repayment are Judge, Pharmacist, Psychologist, Student - Community College and Tradesman - Carpenter
+  
+
+### Charged off and defaulted loans 
+```{r ggpairs4, message=F, warning=F, echo=F, fig.width=8, fig.height=8}
+pairs4 <- subset(pldCohort[pldCohort$LoanStatus.lost=="Lost",], 
+                 select=c(AgeAtClosingMos, InvestorAPY, EmploymentStatus, 
+                          CreditScoreRangeUpper))
+ggpairs(pairs4, columnLabels = c("LoanAge", "APY", "Employment", 
+                                 "CreditScore")) + 
+  ggplot2::theme_linedraw() +
+  theme(axis.text=element_blank())
+```
+  
+* InvestorAPY has a 0.834 correlation with Age at Closing for lost loans.  
+
+```{r ggpairs5, message=F, warning=F, echo=F, fig.width=8, fig.height=8}
+pairs5 <- subset(pldCohort[pldCohort$LoanStatus.lost=="Lost",], 
+                 select=c(AgeAtClosingMos, InvestorAPY, FirstRecordedCreditLine, 
+                          CurrentDelinquencies, IncomeRange))
+pairs5$FirstRecordedCreditLine <- as.numeric(pairs5$FirstRecordedCreditLine)
+ggpairs(pairs5, columnLabels = c("LoanAge", "APY", "FirstCredit", 
+                                 "CurrentDelinq", "Income")) + 
+  ggplot2::theme_linedraw() +
+  theme(axis.text=element_blank())
+```
+
+* There are many outliers in the CurrentDelinquecies by Income Range boxplot.  
+
+```{r, message=F, warning=F, echo=F}
+rm(pairs4)
+rm(pairs5)
+```
+
+
+# Bivariate Questions
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+
+Early loan closing has a different relationship with Investor APY based on whether the loan completed or defaulted. For defaulted loans, APY generally increases with age at loan closing. For completed loans, the opposite is true.  
+
+Among borrower characteristics, certain occupations such as homemaker and military were more associated with early repayment.  Generally the correlations between the borrower characteristics examined and loan age at repayment were not very strong.  
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+
+I was surprised to find some relationships between occupation and early repayment. Interestingly, borrowers who categorized themselves as "investors" tended to repay loans early. Pharmacists and scientists had the highest median percentage of principal repaid among lost loans. It could be that these relationships exist because certain occupations are correlated with higher income levels, and that is driving the repayment trends. 
+
+### What was the strongest relationship you found?
+
+Other than correlations driven by the financial algebra (where one variable is an input into another, such as percent of principal repaid and investor return), the strongest relationship I found was a -0.514 correlation between Investor APY and borrower's credit score (upper range). Why higher credit scores should be associated with lower APY is a bit of a head-scratcher. I think the relationship may be mediated by borrower interest rates. Higher credit scores earn lower interest rates, which generate lower yields. 
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+
+There were clear problems with some of the loan repayment data, where total principal payments and losses failed to equal the original principal. I did a signficant amount of cleaning in the form of dropping data that was significantly out of the correct range and adjusting data that had smaller deviations along the lines of rounding errors. These steps were necessary to reduce distortion in the performance metrics that I derived from the data.
+
+The financial performance metrics that I derived included investor gain, return, and APY. These variables were necessary in order to explore loan performance. Because Prosper Loans calculates interest payments and loan servicing fees on a compounded (i.e. periodic) basis, getting an exact measure of investor return using their definition is actually a bit complicated. Prosper called for return to be calculated based on the average daily principal balance. This is actually a good approach because it takes into account the fact that the investor gets some of the principal returned with each payment.  However, the dataset doesn't contain all the information needed to determine the average daily principal balance accurately. I made an estimate for each loan based on the assumption that the principal was repaid according to the standard payment schedule. This is clearly not the case for many defaulted loans. The errors that this methodology caused were particularly problematic when the total investor loss turned out to be more than the estimated average daily principal balance (a situation that basically blew up my formulas). This removed a small percentage of my data with 'NA' values and caused other estimates to be somewhat inaccurate.
+
+As a result of these issues, my estimates of investor return from the loan data are not completely accurate. More error is expected for lost loans than for fully repaid loans because of the greater likelihood of variation in principal repayment among the former. If this exercise were part of a real business project I would spend more time developing an approach to address these issues, but for the purpose of this assignment I am simply noting the problems and the limitations of my approach here.
+
+# Multivariate Plots
+
+#### Multivariable Interaction Plots  
+
+Previous plots showed that some lost loans can generate high investor APY of 50-100%. My guess is that high interest rates and penalty fees are responsible for these positive returns, so have created plots to look into that.
+
+The next plot shows actual interest and fees paid by borrowers as a percentage of the original loan amount. Each tile shows the distribution for a range of borrower interest rates.
+
+```{r, message=F, warning=F, echo=F}
+pldCohort$IntFees.pct <- 
+  (pldCohort$LP_InterestandFees + pldCohort$LP_NonPrincipalRecoverypayments) /
+  pldCohort$LoanOriginalAmount
+
+ggplot(data=subset(pldCohort, LoanStatus.lost=="Lost" & 
+                     !is.na(BorrowerRate.bucket)), aes(x=IntFees.pct)) +
+  geom_density() +
+  scale_x_continuous(labels=percent_format(), 
+                     name="Interest and Fees Paid as % of Loan Amount") +
+  facet_wrap(~BorrowerRate.bucket) +
+  ggtitle("Lost Loans: Interest and Fee Payments as Borrower Rate Increases")
+```
+
+The lengths of the right-hand tails, representing loans where the interest and fees paid were equivalent to increasingly high percentages of the original loan amount, appear to increase as the interest rate buckets get higher. This could definitely contribute to positive investor returns even when the principal isn't fully repaid.   
+
+```{r, message=F, warning=F, echo=F, fig.width=10, fig.height=6}
+options(digits=0)
+labs <- c(paste("1st qrt (", 0, "-", 
+                percent_format()(quantile(pldCohort$IntFees.pct, 0.25)), ")"), 
+          paste("2nd qrt (", 
+                percent_format()(quantile(pldCohort$IntFees.pct, 0.25)), "-", percent_format()(quantile(pldCohort$IntFees.pct, 0.50)), ")"), 
+          paste("3rd qrt (", 
+                percent_format()(quantile(pldCohort$IntFees.pct, 0.50)), "-", percent_format()(quantile(pldCohort$IntFees.pct, 0.75)), ")"), 
+          paste("4th qrt (", 
+                percent_format()(quantile(pldCohort$IntFees.pct, 0.75)), "-", percent_format()(max(pldCohort$IntFees.pct)),")"))
+
+pldCohort$IntFees.pct.bucket <- cut(pldCohort$IntFees.pct, 
+  breaks=c(0, quantile(pldCohort$IntFees.pct, 0.25), 
+           quantile(pldCohort$IntFees.pct, 0.50), 
+           quantile(pldCohort$IntFees.pct, 0.75), 
+           max(pldCohort$IntFees.pct)), 
+         right=TRUE, ordered=TRUE, labels=labs)
+rm(labs)
+
+ggplot(data=subset(pldCohort, LoanStatus.lost=="Lost"), 
+       aes(x=AgeAtClosing.bucket, y=InvestorReturn, color=IntFees.pct.bucket)) +
+  geom_boxplot() +
+  scale_y_continuous(labels=percent_format()) +
+  xlab("Age at Closing (months)") +
+  guides(color=guide_legend(title="Interest and Fees as % of Loan Amount")) +
+  ggtitle("Lost Loans: Impact of Interest and Fee Payments on Investor Return")
+
+```
+
+This plot shows a number of trends that characterize lost loans:  
+- Investor return generally increases the longer loan payments continue
+- Within each loan age subgroup, higher investor return corresponds to higher interest and fee payments 
+- The defaulted loans seen in previous plots with high returns of more than 100% are outliers and represent a very small proportion of total loans 
+
+On the other hand the driver for positive return among defaulted loans may be the percentage of principal repaid - let's check.  
+
+```{r principal repaid for defaulted loans, message=F, warning=F, echo=F}
+pldCohort$pct.prin.repaid <- (pldCohort$LoanOriginalAmount - pldCohort$adjNetPrincipalLoss)/pldCohort$LoanOriginalAmount
+
+labs <- c("0-50%", "50-75%", "75-100%")
+pldCohort$pct.prin.repaid.bucket <- cut(pldCohort$pct.prin.repaid, 
+                                        breaks=c(-0.1, .50, 0.75, 1.1), 
+                                        right=TRUE, ordered=TRUE, 
+                                        labels=labs)
+rm(labs)
+```
+
+Median percent of principal repaid for lost loans with positive return is `r percent_format()(median(subset(pldCohort, LoanStatus.lost=="Lost" & InvestorReturn>0 & AgeAtClosingMos < 20.1)$pct.prin.repaid, na.rm=TRUE))` compared to `r percent_format()(median(subset(pldCohort, LoanStatus.lost=="Lost" & InvestorReturn<0 & AgeAtClosingMos < 20.1)$pct.prin.repaid, na.rm=TRUE))` for loans with negative return. That must be what is driving the wide spread in returns for defaulted loans repaid early.
+
+```{r Return vs Pct Principal Repaid for defaulted loans, message=F, warning=F, echo=F}
+ggplot(data=subset(pldCohort, LoanStatus.lost=="Lost"), 
+       aes(x=pct.prin.repaid, y=InvestorReturn, color=BorrowerRate.bucket)) +
+  scale_color_brewer() +
+  geom_point() +
+  ggtitle("Lost Loans: Investor Return vs Percent of Principal Repaid")
+```
+
+* This plot confirms that higher returns on defaulted loans are clearly associated with the percent of principal repaid.   
+* It suggests that when the percent of principal repaid is low and investor return is still positive, the borrower interest rate is high.  
+* There are some data points where the percent of principal paid is more than 100%, so there is  some noise in the data. 
+
+## Linear Regression Models  
+
+Now that I've identified early repayment, percent of principal repaid and borrower rate as important variables in determining APY on the basis of data visualizations, I will run regression models on InvestorAPY to confirm and quantify these relationships. There will be models for three sets of data: the first model includes data from all loans, while the second and third utilize data from completed and lost loans, respectively.   
+
+First model independent variables are:  
+- Percent of principal repaid  
+- Borrower interest rate  
+- Interest and fees as a percentage of loan amount  
+- Loan age at closing
+
+```{r LM all loans, message=F, warning=F, echo=F}
+options(digits=5)
+# All 36-month loans
+m1 <- lm(InvestorAPY ~ pct.prin.repaid, data = pldCohort)
+m2 <- update(m1, ~ . + BorrowerRate)
+m3 <- update(m2, ~ . + IntFees.pct)
+m4 <- update(m3, ~ . + AgeAtClosingMos)
+mtable(m1, m2, m3, m4)
+```
+
+```{r, message=F, warning=F, echo=F}
+rm(list=c('m1', 'm2', 'm3', 'm4'))
+```
+
+Observations:  
+- The coefficients of all explanatory variables and the intercept are different from zero at a significance level of p < .01  
+- Repaid principal accounts for most of the variation in Investor APY with an R-squared of 0.88.  
+- Adding the borrower interest rate increases R-squared to 0.916  
+- Adding interest and fees increases R-squared to 0.94  
+- Adding loan age at closing increases R-squared to 0.949  
+  
+Now let's look at the determinants of APY for successfully completed loans only.  I will drop percent of principal repaid since it is 100% for all loans in this category. Because the coefficient on AgeAtClosingMos is smaller than the number of default decimal places (<0.000) I have multiplied APY by 100 in this model.
+
+Second model independent variables are:  
+* Borrower interest rate  
+* Interest and fees as a percentage of loan amount  
+* Loan age at closing
+
+```{r LM on completed loans, message=F, warning=F, echo=F}
+# fully repaid 36-month loans
+n1 <- lm(InvestorAPY*100 ~ BorrowerRate, 
+         data = subset(pldCohort, LoanStatus.lost=="Not Lost"))
+n2 <- update(n1, ~ . + IntFees.pct)
+n3 <- update(n2, ~ . + AgeAtClosingMos)
+mtable(n1, n2, n3)
+rm(list=c('n1', 'n2', 'n3'))
+```
+This model has an R-squared of 0.904 and all coefficients are significantly different from zero at p < 0.01.
+
+The third model is run on charged off and defaulted loans only. The independent variables are:  
+- Percent of principal repaid  
+- Borrower interest rate  
+- Interest and fees as a percentage of loan amount  
+- Loan age at closing
+
+```{r LM on lost loans, message=F, warning=F, echo=F}
+# Charged off and defaulted 36-month loans
+o1 <- lm(InvestorAPY ~ pct.prin.repaid, 
+         data = subset(pldCohort, LoanStatus.lost=="Lost"))
+o2 <- update(o1, ~ . + BorrowerRate)
+o3 <- update(o2, ~ . + IntFees.pct)
+o4 <- update(o3, ~ . + AgeAtClosingMos)
+mtable(o1, o2, o3, o4)
+rm(list=c('o1', 'o2', 'o3', 'o4'))
+```
+This model has an R-squared of 0.934. The coefficient on borrower interest rate is negative, indicating higher rates are associated with lower APY. This could be due to the higher risk of default associated with borrowers that are given higher rates.  
+
+
+## Financial Formulas  
+
+Since the formulas governing InvestorAPY are known from Prosper Loan materials and general financial definitions, I can determine what the effects of early repayment should be from a theoretical perspective and use this information to help interpret the loan data.
+
+Below is a function to approximate cumulative interest payments, investor service fees and average daily principal balance given inputs for principal, interest rate, loan term, and final repayment date.  
+
+Assumptions include:  
+- Interest and investor service fees accrue monthly (Prosper loans accrue interest and fees daily, so my model is simplifying that aspect)  
+- Investor service fee of 1% of outstanding principal balance each payment period   
+
+```{r Loan function, message=F, warning=F, echo=F}
+# Inputs: vector (P, r, n, t) where
+# P = loan amt, r = annual interest rate, n = loan term (months), 
+# t = loan age at repayment (days)
+# Outputs: total interest paid, total Prosper service fees, average daily 
+# principal balance
+
+Loan <- function(v)
+  {
+  principal <- v[1]
+  r <- v[2]
+  n <- v[3]
+  t <- v[4]
+  cumulative.interest <- 0
+  cumulative.svc.fee <- 0 
+  cumulative.principal <- 0
+  # A = monthly payment
+  A <- principal*(r/12*(1+r/12)^n)/((1+r/12)^n-1)
+  # no. of whole months before repayment
+  m <- trunc(t/30.4)
+  # monthly accruals
+  if (m > 0) {
+    for (i in 1:m) {
+      interest <- round(r/12*principal, 2)
+      cumulative.interest <- cumulative.interest + interest
+      cumulative.svc.fee <- cumulative.svc.fee + 0.01/12*principal 
+      cumulative.principal <- cumulative.principal + principal*30.4 
+      principal <- principal - (A - interest) }
+  }
+  # number of days in last fractional month before repayment
+  d <- floor(t%%30.4)
+  # accruals from last fractional month
+  interest <- round(r/365*principal*d, 2)
+  cumulative.interest <- cumulative.interest + interest
+  cumulative.svc.fee <- cumulative.svc.fee + 0.01/365*d*principal 
+  cumulative.principal <- cumulative.principal + principal*d
+  # average daily principal balance
+  principal.avg <- cumulative.principal/t
+  result <- c(cumulative.interest, cumulative.svc.fee, principal.avg, principal)
+}
+```
+
+Simulated loan data for two scenarios:   
+- 36-mo, $5000 loan at 20% interest rate  
+- 36-mo, $10000 loan at 13.5% interest rate  
+
+```{r loan simulations, message=F, warning=F, echo=F}
+# 36-mo, $5000 loan at 20% interest rate
+amort <- data.frame(cbind(P=rep(5000, 1095), r=rep(.20, 1095), n=rep(36, 1095), 
+                          t=(1:1095)))
+  # calculate loan amortization
+result <- t(apply(amort, 1, Loan))
+colnames(result) <- 
+  c("total.int", "total.svc.fee", "avg.prin.bal", "principal")
+amort <- cbind(amort, result)
+rm(result)
+  # calculate loan return
+amort$return <- (amort$total.int - amort$total.svc.fee)/amort$avg.prin.bal
+amort$APY <- (amort$return + 1)^(365/amort$t) - 1
+  # percent interest paid over loan term
+max.int <- amort[amort$t==1094,]$total.int
+amort$pct.int.paid <- amort$total.int/max.int
+  # total service fees as percent of avg daily principal balance
+amort$pct.fee.paid <- amort$total.svc.fee/amort$avg.prin.bal
+  # percent of principal repaid
+amort$pct.prin.paid <- (amort$P-amort$principal)/amort$P
+
+# 36-mo, $10000 loan at 13.5% interest rate
+amort13 <- data.frame(cbind(P=rep(10000, 1095), r=rep(.135, 1095), 
+                            n=rep(36, 1095), t=(1:1095)))
+  # calculate loan amortization
+result <- t(apply(amort13, 1, Loan))
+colnames(result) <- 
+  c("total.int", "total.svc.fee", "avg.prin.bal", "principal")
+amort13 <- cbind(amort13, result)
+rm(result)
+  # calculate loan return
+amort13$return <- 
+  (amort13$total.int - amort13$total.svc.fee)/amort13$avg.prin.bal
+amort13$APY <- (amort13$return + 1)^(365/amort13$t) - 1
+  # percent interest paid over loan term
+max.int <- amort13[amort13$t==1094,]$total.int
+amort13$pct.int.paid <- amort13$total.int/max.int
+  # total service fees as percent of avg daily principal balance
+amort13$pct.fee.paid <- amort13$total.svc.fee/amort13$avg.prin.bal
+  # percent of principal repaid
+amort13$pct.prin.paid <- (amort13$P-amort13$principal)/amort13$P
+```
+
+## Predicted vs Actual Relationships
+
+```{r Interest paid vs loan age, message=F, warning=F, echo=F}
+ggplot() +
+  geom_line(data=amort, aes(y=return, x=t/30.4, color="brown"), size=3) +
+  geom_line(data=amort, aes(x=t/30.4, y=APY, color="orange"), size=3) +
+  geom_line(data=amort, aes(x=t/30.4, y=pct.int.paid, color="blue"), size=2, 
+            linetype=2) +
+  geom_smooth(data=amort, aes(x=t/30.4, y=pct.prin.paid, color="black"), size=2, 
+              linetype=2) +
+  geom_point(data=subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+                         BorrowerRate >= .199 & BorrowerRate <= 0.201 
+                         & LoanOriginalAmount>4900 & LoanOriginalAmount<5100), 
+             aes(x=AgeAtClosingMos, y=InvestorReturn, shape="22"), size=3, 
+             fill="orange") +
+  geom_point(data=subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+                         BorrowerRate >= .199 & BorrowerRate <= 0.201 
+                         & LoanOriginalAmount>4900 & LoanOriginalAmount<5100), 
+             aes(x=AgeAtClosingMos, y=InvestorAPY, shape="21"), size=3, 
+             fill="orange") +
+  scale_x_continuous(breaks=seq(0,36,18), name="months until loan repayment") +
+  scale_y_continuous(breaks=c(0, .15, .2, .25, 0.5, 0.75, 1), 
+                     labels=percent_format(), name="percent") +
+  scale_color_manual(name="Predicted Values", values =c('blue'='blue', 
+                                                        'orange'='orange', 
+                                                        'black'='black', 
+                                                        'brown'='brown'), 
+                     labels = c('Percent of principal paid',
+                                'Percent of interest paid', 'Return','APY')) +
+  scale_shape_manual(values=c("22"=22, "21"=21), name="Actual Values", 
+                     labels=c("APY", "Return")) +
+  ggtitle("Performance of $5000, 36-month loan at 20% interest")
+```
+
+This plot illustrates the basic intuition behind the advantage of early repayment to the investor. By the midpoint of the loan term at 18 months, more than half of the total interest has been paid but less than half of the principal has been recovered. If the borrower repays the loan early, the investor can reinvest all of the principal in another loan and thereby increase APY. Since APY declines continuously with time, the model suggests that the earlier the repayment, the better for the investor. 
+
+```{r Return & service fees, message=F, warning=F, echo=F}
+
+# svc fees as % of avg daily principal balance
+pldCohort$svc.fees.pct <- -pldCohort$LP_ServiceFees/pldCohort$AvgPrincipal
+
+ggplot(data=subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+                   BorrowerRate >= .13 & BorrowerRate <= 0.14 
+                   & LoanOriginalAmount>9900 & LoanOriginalAmount<10100)) +
+  geom_line(data=amort13, aes(x=t/30.4, y=return), color="black", size=2) +
+  geom_point(aes(x=AgeAtClosingMos, y=InvestorReturn, color=svc.fees.pct), 
+             size=3) +
+  scale_colour_gradient(low="red") +
+  scale_x_continuous(breaks=seq(0, 36, 6), name="months to payback") +
+  ylab("Return") +
+  ggtitle("Expected vs actual return: 
+           Completed $10,000, 36-month loans @13-14%, 
+           loan servicing fee = 1%")
+```
+
+There are a few loans at 36 months that have higher return than average and lower service fees, but there are still low-fee loans sprinkled among those with returns below the predicted curve. Part of this could be due to the fact that I included loans with interest rates between 13% and 14% in order to increase the number of data points, whereas the predictive model is based on exactly 13.5%. 
+
+```{r Expected vs actual investor APY, message=F, warning=F, echo=F}
+# 20% interest rate
+ggplot(data=subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+                   BorrowerRate >= .199 & BorrowerRate <= 0.201 
+                   & LoanOriginalAmount==5000)) +
+  geom_line(data=amort, aes(x=t/30.4, y=APY), color="black", size=2) +
+  geom_point(aes(x=AgeAtClosingMos, y=InvestorAPY, color=svc.fees.pct), 
+             size=3) +
+  scale_colour_gradient(low="red") +
+  scale_x_continuous(breaks=seq(0, 36, 6), name="months to payback") +
+  ylab("APY") +
+  ggtitle("Expected vs actual investor APY \n from completed $5000, 36-month 
+          loans \n borrower interest rate = 20%, \n loan servicing fee = 1%")
+```
+
+* There are a number of data points that fall well below the predicted APY curve. Not sure why that is. Doesn't appear to be connected to the service fees, as they are similar for points on and below the curve. 
+
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+
+Borrower interest rate and percent of principal repaid both were major contributors to investor APY and reinforced each other's effects in the case of lost loans. Since percent of principal repaid increases with the number of payments made over time, this variable probably accounts for some of the correlation that I observed in the initial scatterplots between loan age at closing and investor APY.
+
+### Were there any interesting or surprising interactions between features?
+
+Not really. Since the variables of interest were driven by predictable algebraic formulas the relationships were pretty much expected once I decomposed the data properly.
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+
+I create two types of model: OLS linear regression models and a top-down model based on the financial formulas governing loan payments. Given my focus on the effects of early repayment on investor APY, the financial formulas provide the better model because they allow for very specific and accurate predictions of APY based on interest rate, loan term, loan amount and time to repayment.  
+
+What the models I developed don't address is the risk element of the loan process. Now that I understand the mechanics of the loan process from a structural point of view, it would make sense to explore the data for insights on how borrower characteristics relate to the risk of default. For this question regression models would be a better choice than financial models since the relationships are not known in advance. 
+
+
+# Final Plots and Summary
+
+### Plot One
+
+```{r P1: InvestorAPY vs AgeAtClosingMos, message=F, warning=F, echo=F, fig.width=9, fig.height=7}
+ggplot(data=pldCohort, aes(y=InvestorAPY, x=AgeAtClosingMos, 
+                           color=BorrowerRate.bucket)) +
+  geom_point(alpha=1) +
+  scale_color_brewer() +
+  scale_y_continuous(limits=c(-1.1, 1), labels=percent_format()) +
+  scale_x_continuous(limits=c(0, 40), 
+                     name=paste("Months since loan origination at ",
+                                "time of closing")) +
+  geom_smooth(color="brown", na.rm=FALSE) +
+  facet_grid(~ LoanStatus.lost) +
+  guides(color=guide_legend(title="Borrower Interest Rate")) +
+  ggtitle("Investor APY vs Early Loan Closing")
+```
+
+### Description One
+
+At first glance, these plots of annual percentage yield (APY) don't seem to make sense: the earlier the loans close, the wider the range of APY. Why would both the best and worst performing loans be associated with the earliest closing dates? Looking at successfully completed loans on the left, the upper bound of the data seems to slope downward as the months increase. On the right, loans that failed within the first 10 months have APYs ranging from -100% (total loss) to more than +75%. This plot sparked my investigation of the effect of early repayment on loan performance in the Prosper data.
+
+### Plot Two
+
+```{r P2, message=F, warning=F, echo=F, fig.width=7, fig.height=6}
+ggplot() +
+  geom_line(data=amort, aes(y=return, x=t/30.4, color="brown"), size=3) +
+  geom_line(data=amort, aes(x=t/30.4, y=APY, color="orange"), size=3) +
+  geom_line(data=amort, aes(x=t/30.4, y=pct.int.paid, color="blue"), size=2, 
+            linetype=2) +
+  geom_smooth(data=amort, aes(x=t/30.4, y=pct.prin.paid, color="black"), 
+              size=2, linetype=2) +
+  geom_point(data=subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+                         BorrowerRate >= .199 & BorrowerRate <= 0.201 
+                         & LoanOriginalAmount>4900 & LoanOriginalAmount<5100), 
+             aes(x=AgeAtClosingMos, y=InvestorReturn, shape="22"), size=3, 
+             fill="orange") +
+  geom_point(data=subset(pldCohort[pldCohort$LoanStatus.lost=="Not Lost",], 
+                         BorrowerRate >= .199 & BorrowerRate <= 0.201 
+                         & LoanOriginalAmount>4900 & LoanOriginalAmount<5100), 
+             aes(x=AgeAtClosingMos, y=InvestorAPY, shape="21"), size=3, 
+             fill="orange") +
+  scale_x_continuous(breaks=seq(0,36,18),name="Month at which loan is repaid") +
+  scale_y_continuous(breaks=c(0, .15, .2, 0.5, 0.75, 1), 
+                     labels=percent_format(), 
+                     name="APY / Return / Percent Paid") +
+  scale_color_manual(name="Predicted Values", values =c('blue'='blue', 
+                                                        'orange'='orange', 
+                                                        'black'='black', 
+                                                        'brown'='brown'), 
+                     labels = c('Percent of principal paid', 
+                                'Percent of interest paid', 'Return','APY')) +
+  scale_shape_manual(values=c("22"=22, "21"=21), name="Actual Values", 
+                     labels=c("APY", "Return")) +
+  guides(color=guide_legend(title="Predicted Values")) +
+  ggtitle("Fully Repaid Loans: Drivers of Investor APY")
+```
+  
+Note: Plot depicts model results for $5000, 36-month loans @20% interest   
+  
+### Description Two
+This plot shows the drivers of APY for fully repaid loans and illustrates the basic intuition behind the benefits of early repayment to the investor. By the midpoint of the loan term at 18 months, more than half of the total interest has been paid but less than half of the principal has been recovered. While return continues to increase so long as additional interest is paid over the three year loan term, the annualized yield decreases over time. If the borrower repays the loan early, the investor can reinvest all of the principal in another loan and thereby earn more on an annual basis.  
+
+The point markers on the plot show the actual performance of Prosper loans matching the modelled parameters ($5000, 36-month, fully repaid loans at 20% interest). The generally close fit of the data points around the predicted lines shows that the loans are behaving as expected, although there is some variation. The divergence from the predicted line is especially apparent for investor return at full term, 36 months, where we see multiple data points above and below the line. The variations in return most likely reflect real-world differences from the assumptions in the model, such as varying investor service fees (modeled at 1%) or penalty income from late payments, as well as noise (error) in the data.
+
+### Plot Three
+
+```{r P3: Investor APY vs Early Repayment for Lost Loans, message=F, warning=F, echo=F, fig.width=8, fig.height=7}
+pldLost <- subset(pldCohort, LoanStatus.lost=="Lost")
+pldLost$PrIntFees.pct <- pldLost$pct.prin.repaid + pldLost$IntFees.pct
+f <- ecdf(pldLost$InvestorAPY)
+options(digits=0)
+labs <- c(paste(0, "-", 
+                percent_format()(quantile(pldLost$PrIntFees.pct, 0.50))), 
+          paste(percent_format()(quantile(pldLost$PrIntFees.pct, 0.50)), "-", percent_format()(quantile(pldLost$PrIntFees.pct, 0.90))), 
+          paste(percent_format()(quantile(pldLost$PrIntFees.pct, 0.90)),
+                "-", percent_format()(max(pldLost$PrIntFees.pct))))
+pldLost$PrIntFees.bucket <- cut(pldLost$PrIntFees.pct, 
+  breaks=c(0, quantile(pldLost$PrIntFees.pct, 0.50), 
+           quantile(pldLost$PrIntFees.pct, 0.90), 
+           max(pldLost$PrIntFees.pct)), 
+         right=TRUE, ordered=TRUE, labels=labs)
+rm(labs)
+
+ggplot(data=subset(pldLost, InvestorAPY < 5), aes(x=AgeAtClosing.bucket, y=InvestorAPY)) +
+  geom_boxplot(aes(color=PrIntFees.bucket)) +
+  scale_y_continuous(labels=percent_format()) +
+  xlab("Age at Closing (months)") +
+  theme(legend.position=c(.7, .8)) +
+  guides(color=guide_legend(title="Principal, Interest and Fees
+as % of Loan Amount")) +
+  ggtitle("Lost Loans: Drivers of Investor APY")
+```
+
+
+### Description Three
+
+This graphic explores the main drivers of APY for charged-off and defaulted loans. The plot shows the same funnel-shaped pattern that was evident in Plot One: loans that close in months 0-9 have the widest range of APYs and those that close near the end of the term have the narrowest. Now, however, the reasons for this shape are clearer. There are some loans with a high proportion of principal, interest and fee payments in every age category, and these factors are driving APY. Even when the borrower defaults during the first nine months, investors can still make money from those borrowers who repaid a high proportion of principal along with significant interest and fees. 
+
+It is now possible to see that age at loan closing is associated with both positive and negative effects on investor APY. The earlier a loan closes, the higher its APY will be for the same amount of investor gain. But the later a loan closes, the more likely it is that a higher percentage of the original principal has been repaid. Loan age and percent of principal repaid are tightly associated, with a correlation of `r options(digits=3)` `r cor(pldLost$pct.prin.repaid, pldLost$AgeAtClosingMos)`.
+
+This plot also reminds us that the vast majority of defaulted loans are money losers for the investor. We can see that the highest APYs are mostly outliers. In fact, lost loans with positive APY constitute the top `r f <- ecdf(pldLost$InvestorAPY)` `r percent_format()(1-f(0))` of defaulted loans by performance; only `r percent_format()(1-f(.2))` of defaulted loans achieve APY greater than 20%.  
+
+
+# Reflection
+
+When I first saw the high yields associated with early closing loans, it sparked my interest because I thought it might lead to an improved investor strategy for maximizing portfolio yields. Having done the analysis, I find that early repayment has a fairly small impact on the investor's annualized yield. The correlation between loan age at closing and APY for fully repaid loans is only -0.037, and the regression model coefficient predicted that 10 additional months to repayment would result in a decrease in APY of only 0.35%. The model based on financial formulas shows that early repayment should increase the APY of fully-repaid loans, but in the real-world dataset this impact is unclear. Overall, the analysis indicates that investors would benefit from encouraging full, early repayment by borrowers.   
+
+Next steps in the analysis could focus on predicting the risk of default based on borrower characteristics. Default is the single largest risk to investors. The analysis I've done on early loan closing suggests that rather than modeling the risk of default as a binary variable, it could be modeled as a continuous variable ranging from earliest full principal repayment to earliest full principal default. The dependent variable could be an interactive term based on the percent of principal repaid and age of loan at closing. This term would represent the relative financial strength of the borrower on a continuous scale.     
+

@@ -1,0 +1,3 @@
+This project aimed to identify persons of interest (POIs) in the Enron corporate fraud scandal by using supervised learning techniques on a public Enron email database. The analysis utilized sklearn's Lasso function to select the most significant input features, then tested the predictive performance of five different machine learning algorithms: GaussianNB, SVM, Decision Tree, Random Forest, and K Nearest Neighbors. The best performing model achieved an average precision score of 0.41 and an average recall of 0.53.
+
+This analysis was the final project for Udacity's Intro to Machine Learning course, completed in January 2016.
