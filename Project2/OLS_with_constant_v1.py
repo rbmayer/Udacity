@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Aug 25 10:41:51 2015
-
-@author: rebecca
 haversine function author: @ballsdotballs, http://tinyurl.com/q4egllb
 
 Script for linear regression of improved dataset with constant
@@ -19,12 +17,14 @@ import statsmodels.api as sm
 import pandasql
 import csv
 
-df = pandas.read_csv('/home/rebecca/Nanodegree/Project2/improved-dataset/improved-dataset/turnstile_weather_v2.csv')
+df = pandas.read_csv('/home/rebecca/Nanodegree/Project2/improved-dataset/'
+'improved-dataset/turnstile_weather_v2.csv')
 
 # path to save results file
 path = '/home/rebecca/Nanodegree/Project2/OLSresults/wc_results15.txt'
 
-# create holiday column in improved dataset where weekends & holidays==1, weekdays==0
+# create holiday column in improved dataset where weekends & holidays==1, 
+# weekdays==0
 def create_holiday_col(row):
     if row['DATEn'][3:5] == '30':
         return 1
@@ -35,7 +35,8 @@ def create_holiday_col(row):
         
 df.loc[:,'holiday'] = df.apply(create_holiday_col, axis=1)
 
-# create modified day_week column in improved dataset so that Memorial Day is encoded as a Sunday
+# create modified day_week column in improved dataset so that Memorial Day 
+# is encoded as a Sunday
 def create_day_week_mod_col(row):
     if row['DATEn'][3:5] == '30':
         return 6
@@ -62,10 +63,8 @@ units = pysqldf(q)
 
 # implement haversine function
 def haversine(lon1, lat1, lon2, lat2):
-    """
-    Calculate the great circle distance between two points on the earth (specified in decimal degrees). All args must be of equal length.    
-
-    """
+    """Calculate the great circle distance between two points on the earth 
+    (specified in decimal degrees). All args must be of equal length. """
     lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
 
     dlon = lon2 - lon1
@@ -79,9 +78,13 @@ def haversine(lon1, lat1, lon2, lat2):
     return km
     
 # create uxu matrix of distances between units
-q2 = '''SELECT a.UNIT AS unit1, a.station AS station1, a.latitude AS latitude1, a.longitude AS longitude1, b.UNIT AS unit2, b.station AS station2, b.latitude AS latitude2, b.longitude AS longitude2 FROM units a JOIN units b WHERE unit1 != unit2;'''
+q2 = ('''SELECT a.UNIT AS unit1, a.station AS station1, a.latitude AS 
+latitude1, a.longitude AS longitude1, b.UNIT AS unit2, b.station AS station2, 
+b.latitude AS latitude2, b.longitude AS longitude2 FROM units a JOIN units b 
+WHERE unit1 != unit2;''')
 uxu = pysqldf(q2)
-uxu['dist'] = haversine(uxu['longitude1'],uxu['latitude1'],uxu['longitude2'],uxu['latitude2'])
+uxu['dist'] = haversine(uxu['longitude1'], uxu['latitude1'], uxu['longitude2'], 
+                        uxu['latitude2'])
 
 # add neighbor count to units
 def neighbor_count(unit, uxu, radius):
@@ -92,14 +95,16 @@ def neighbor_count(unit, uxu, radius):
     return count
 
 radius = 1.0 # neighbor radius in km
-units.loc[:,'neighbor_count'] = units['UNIT'].apply(lambda x: neighbor_count(x, uxu, radius)) 
+units.loc[:,'neighbor_count'] = units['UNIT'].apply(lambda x: 
+    neighbor_count(x, uxu, radius)) 
 
 # add neighbor count column to df (slow)
 def lookup_neighbor_count(x):
     count = int(units['neighbor_count'][units.UNIT==x].values)
     return count
     
-df.loc[:,'neighbor_count'] = df['UNIT'].apply(lambda x: lookup_neighbor_count(x))
+df.loc[:,'neighbor_count'] = df['UNIT'].apply(lambda x: 
+    lookup_neighbor_count(x))
 
 # create neighbor_count x precipi interaction term
 def neighbor_interaction(row):
@@ -121,9 +126,6 @@ def take_log(x):
         return np.log(x)
         
 df.loc[:,'entries_log'] = df['ENTRIESn_hourly'].apply(lambda x: take_log(x))
-
-# Optional: save copy of df to csv
-# df.to_csv('/home/rebecca/Nanodegree/Project2/improved df versions.csv', index=False, index_label=False)
 
 # statsmodel OLS no constant
 def linear_regression(features, values):

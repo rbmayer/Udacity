@@ -11,7 +11,9 @@ import scipy.stats
 import pandasql
 import matplotlib.pyplot as plt
 
-turnstile_weather = pandas.read_csv( '/home/rebecca/Nanodegree/Intro to Data Science/Lesson3/turnstile_data_master_with_weather.csv', index_col=0) 
+turnstile_weather = pandas.read_csv( '/home/rebecca/Nanodegree/'
+'Intro to Data Science/Lesson3/turnstile_data_master_with_weather.csv', 
+index_col=0) 
 
 def reduce(x):
     if x > 0:
@@ -21,9 +23,10 @@ def reduce(x):
 
 def entries_histogram(df):
     
-        # Sum entries by date and UNIT
+    # Sum entries by date and UNIT
     global daily_entries
-    daily_entries = df[['DATEn','UNIT','ENTRIESn_hourly']].groupby(['DATEn','UNIT']).sum()
+    daily_entries = (df[['DATEn','UNIT','ENTRIESn_hourly']].
+                        groupby(['DATEn','UNIT']).sum())
     daily_entries = daily_entries.reset_index()
     # Group rain by date
     global daily_rain
@@ -33,14 +36,16 @@ def entries_histogram(df):
     # Join daily_entries and daily_rain tables on date
     from pandasql import sqldf
     pysqldf = lambda q: sqldf(q, globals())
-    q = '''SELECT e.DATEn, e.UNIT, e.ENTRIESn_hourly, p.rain FROM daily_entries e JOIN daily_rain p ON e.DATEn = p.DATEn;'''
+    q = ('''SELECT e.DATEn, e.UNIT, e.ENTRIESn_hourly, p.rain FROM '
+    'daily_entries e JOIN daily_rain p ON e.DATEn = p.DATEn;''')
     daily_entries = pysqldf(q)
     # Divide daily_entries into rain and no-rain tables
     no_rain = daily_entries[daily_entries.rain==0]
     rain = daily_entries[daily_entries.rain==1]
     x = [no_rain['ENTRIESn_hourly'], rain['ENTRIESn_hourly']]
     # plot histogram
-    plt.hist(x, bins = 23, range = (0, 60000), color=['k','m'], label=["no rain","rain"])
+    plt.hist(x, bins = 23, range = (0, 60000), color=['k','m'], 
+             label=["no rain","rain"])
     plt.ylim( 0, 3000 ) 
     #plt.title("Histogram of Daily Subway Entries")
     plt.xlabel("ENTRIESn_hourly summed by date and remote unit")
@@ -48,4 +53,6 @@ def entries_histogram(df):
     legend = plt.legend()
     return plt
 
-entries_histogram(turnstile_weather)
+
+if __name__ == "__main__":  
+    entries_histogram(turnstile_weather)
