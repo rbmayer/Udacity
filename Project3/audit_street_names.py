@@ -2,7 +2,13 @@
 """
 Audit street names
 
-The purpose of this script is to audit english- and arabic-language street names in a segment of the OSM Syria map to identify abbreviations or errors for cleaning at a later stage. Street names generally appear in "way" elements within the "highway" category where they are specified in a "name" tag. However, neither "highway" nor "name" tags refer uniquely to streets. A very small number of street names (6) appear in "node" elements signified by "addr:street". 
+The purpose of this script is to audit english- and arabic-language street 
+names in a segment of the OSM Syria map to identify abbreviations or errors 
+for cleaning at a later stage. Street names generally appear in "way" elements 
+within the "highway" category where they are specified in a "name" tag. 
+However, neither "highway" nor "name" tags refer uniquely to streets. A very 
+small number of street names (6) appear in "node" elements signified by 
+"addr:street". 
 """
 
 
@@ -12,9 +18,13 @@ import re
 
 OSMFILE = '/home/rebecca/version-control/nanodegree/project3/map'
 
-expected = [u"Street", u"Avenue", u"Boulevard", u"Sharia", u"Souq", u"Place", u"Road", u"Roundabout", u"سوق",u"جادة", u"شارع", u"طريق"]
+expected = [u"Street", u"Avenue", u"Boulevard", u"Sharia", u"Souq", u"Place", 
+            u"Road", u"Roundabout", u"سوق",u"جادة", u"شارع", u"طريق"]
 
-highway_types = [u'motorway', u'trunk', u'primary', u'secondary', u'tertiary', u'unclassified', u'residential', u'service', u'living street', u'pedestrian', u'track', u'bus_guideway', u'road', u'proposed', u'construction']
+highway_types = [u'motorway', u'trunk', u'primary', u'secondary', u'tertiary', 
+                 u'unclassified', u'residential', u'service', u'living street', 
+                 u'pedestrian', u'track', u'bus_guideway', u'road', 
+                 u'proposed', u'construction']
 
 def match_arabic_name(unicode_name):
     # input unicode string
@@ -39,11 +49,13 @@ def match_english_name(unicode_name):
     
 def is_arabic(unicode_string):
     # search for any word within arabic unicode range (0600, 06ff)
-    return re.search(ur'\b[\u0600-\u06ff]*\b', unicode_string, re.UNICODE).group()
+    return re.search(ur'\b[\u0600-\u06ff]*\b', unicode_string, 
+                     re.UNICODE).group()
         
 def is_english(unicode_string):
     # search for any word within ascii unicode range (0000,007f)   
-    return re.search(ur'\b[\u0000-\u007f]*\b', unicode_string, re.UNICODE).group()
+    return re.search(ur'\b[\u0000-\u007f]*\b', unicode_string, 
+                     re.UNICODE).group()
 
 
 def audit_street_type(street_name):
@@ -82,21 +94,25 @@ def audit(osmfile):
         if elem.tag == "node":
             for tag in elem.iter("tag"):
                 if is_street_name(tag) and tag.attrib['v'] != "":
-                    street_type, street_name = audit_street_type(tag.attrib['v'])
+                    street_type, street_name = audit_street_type(
+                        tag.attrib['v'])
                     add_street_type(street_types, street_type, street_name)
         # audit street names in "ways" containing "highway"
         elif elem.tag == "way":
             highway = 0
             # check if way matches an included highway type
             for tag in elem.iter("tag"):
-                if (tag.attrib['k'] == "highway") and (tag.attrib['v'] in highway_types):
+                if (tag.attrib['k'] == "highway") and (tag.attrib['v'] 
+                in highway_types):
                     highway = 1
             if highway == 1:
                 for tag in elem.iter("tag"):
                     if is_name(tag) and tag.attrib['v'] != "":
-                        street_type, street_name = audit_street_type(tag.attrib['v'])
+                        street_type, street_name = audit_street_type(
+                            tag.attrib['v'])
                         if street_type != None:
-                            add_street_type(street_types, street_type, street_name)
+                            add_street_type(street_types, street_type, 
+                                            street_name)
                             
     return street_types
 

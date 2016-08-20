@@ -2,8 +2,6 @@
 """
 Created on Mon Sep 14 16:42:59 2015
 
-@author: rebecca
-
 Count number of tags with "addr"
 add 'addr' keys and values to dict
 output unicode strings

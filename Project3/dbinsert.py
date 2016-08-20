@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Sep  9 14:39:30 2015
-
-@author: rebecca
+Insert database into MongoDB collection
 """
 
 import json
 import pymongo
 
-''' Use db.osm_syria.remove() before re-running this script to avoid duplicating db's '''
+''' Use db.osm_syria.remove() before re-running this script to avoid 
+duplicating db's '''
 
 def insert_data(data, db):
     # Insert the data into a collection 'osm_syria'

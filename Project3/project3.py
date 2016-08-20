@@ -13,7 +13,10 @@ import re
 import codecs
 import json
 
-highway_types = [u'motorway', u'trunk', u'primary', u'secondary', u'tertiary', u'unclassified', u'residential', u'service', u'living street', u'pedestrian', u'track', u'bus_guideway', u'road', u'proposed', u'construction']
+highway_types = [u'motorway', u'trunk', u'primary', u'secondary', u'tertiary', 
+                 u'unclassified', u'residential', u'service', u'living street', 
+                 u'pedestrian', u'track', u'bus_guideway', u'road', 
+                 u'proposed', u'construction']
 CREATED = [ "version", "changeset", "timestamp", "user", "uid"]
 # previous script showed no problem chars in the dataset
 # problemchars = re.compile(r'[=\+/&<>;\'"\?%#$@\,\. \t\r\n]')
@@ -37,12 +40,14 @@ def is_name(k):
     
 def is_arabic(unicode_string):
     # search for any word within arabic unicode range (0600, 06ff)
-    return re.search(ur'\b[\u0600-\u06ff]*\b', unicode_string, re.UNICODE).group()
+    return re.search(ur'\b[\u0600-\u06ff]*\b', unicode_string, 
+                     re.UNICODE).group()
         
         
 def is_english(unicode_string):
     # search for any word within ascii unicode range (0000,007f)   
-    return re.search(ur'\b[\u0000-\u007f]*\b', unicode_string, re.UNICODE).group()
+    return re.search(ur'\b[\u0000-\u007f]*\b', unicode_string, 
+                     re.UNICODE).group()
     
 def make_pairs_unicode(k, v):
     if type(k) != unicode:
@@ -154,9 +159,11 @@ def process_map(file_in, pretty = False):
             if node:
                 # check unicode-related output code
                 if pretty:
-                    fo.write(json.dumps(node, indent=2, ensure_ascii=False).encode('utf8')+"\n")
+                    fo.write(json.dumps(node, indent=2, 
+                            ensure_ascii=False).encode('utf8')+"\n")
                 else:
-                    fo.write(json.dumps(node,  ensure_ascii=False).encode('utf8') + "\n")   
+                    fo.write(json.dumps(node,  
+                            ensure_ascii=False).encode('utf8') + "\n")   
     print "output to JSON completed"
     return 
     

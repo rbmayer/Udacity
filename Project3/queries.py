@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Sep 21 09:32:11 2015
-
-@author: rebecca
-
 MongoDB queries on Syria OSM
 """
 
@@ -16,13 +13,22 @@ q5 = 'Total number of streets with names in other languages'
 
 q1_pipeline = [{ "$match" : { "street_names" : { "$exists" : 1 } } },
                { "$group" : { "_id" : q1, "count" : { "$sum" : 1 } } } ]
-q2_pipeline = [{ "$match" : { "street_names.arabic_street_name" : 1, "street_names.english_street_name" : { "$exists" : 0 } } },
+q2_pipeline = [{ "$match" : { "street_names.arabic_street_name" : 1, 
+                             "street_names.english_street_name" : 
+                                 { "$exists" : 0 } } },
                { "$group" : { "_id" : q2, "count" : { "$sum" : 1 } } } ]
-q3_pipeline = [{ "$match" : { "street_names.english_street_name" : 1, "street_names.arabic_street_name" : { "$exists" : 0 } } },
+q3_pipeline = [{ "$match" : { "street_names.english_street_name" : 1, 
+                             "street_names.arabic_street_name" : 
+                                 { "$exists" : 0 } } },
                { "$group" : { "_id" : q3, "count" : { "$sum" : 1 } } }  ]
-q4_pipeline = [{ "$match" : { "street_names.english_street_name" : 1, "street_names.arabic_street_name" : 1 } },
+q4_pipeline = [{ "$match" : { "street_names.english_street_name" : 1, 
+                             "street_names.arabic_street_name" : 1 } },
                { "$group" : { "_id" : q4, "count" : { "$sum" : 1 } } } ]
-q5_pipeline = [{ "$match" : { "street_names" : { "$exists" : 1 }, "street_names.english_street_name" : { "$exists" : 0 }, "street_names.arabic_street_name" : { "$exists" : 0 } } },
+q5_pipeline = [{ "$match" : { "street_names" : { "$exists" : 1 }, 
+                             "street_names.english_street_name" : 
+                                 { "$exists" : 0 }, 
+                            "street_names.arabic_street_name" : 
+                                { "$exists" : 0 } } },
                { "$group" : { "_id" : q5, "count" : { "$sum" : 1 } } } ]
 
 def get_db(db_name):
@@ -46,7 +52,11 @@ query2 = run_query('project3', q2, q2_pipeline)
 query3 = run_query('project3', q3, q3_pipeline)
 query4 = run_query('project3', q4, q4_pipeline)
 query5 = run_query('project3', q5, q5_pipeline)
-print 'check: ' + str(query1[0]['count']) + ' - ( ' + str(query2[0]['count']) + ' + ' + str(query3[0]['count']) + ' + ' + str(query4[0]['count']) + ' + ' + str(query5[0]['count']) + ' ) = ' + str(query1[0]['count'] - query2[0]['count'] - query3[0]['count'] - query4[0]['count'] - query5[0]['count'])
+print ('check: ' + str(query1[0]['count']) + ' - ( ' + str(query2[0]['count']) 
+        + ' + ' + str(query3[0]['count']) + ' + ' + str(query4[0]['count']) + 
+        ' + ' + str(query5[0]['count']) + ' ) = ' + str(query1[0]['count'] - 
+        query2[0]['count'] - query3[0]['count'] - query4[0]['count'] - 
+        query5[0]['count']))
 
 '''
 results:
@@ -56,18 +66,4 @@ Total number of streets with english names only: 193
 Total number of streets with both arabic and english names: 56
 Total number of streets with names in other languages: 3
 check: 1008 - ( 756 + 193 + 56 + 3 ) = 0
-'''
-
-
-'''
-# explore documents with neither english nor arabic street names
-q6_pipeline = [{ "$match" : { "street_names" : { "$exists" : 1 }, "street_names.english_street_name" : { "$exists" : 0 }, "street_names.arabic_street_name" : { "$exists" : 0 } } }]
-
-query6 = aggregate(get_db('project3'), q6_pipeline)
-
-for document in query6:
-    print document
-    
-# results show street names in language that is not english or arabic (probably turkish)
-# revising q5 label from 'streets with no name' to 'streets with names in other languages'
 '''

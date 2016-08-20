@@ -4,26 +4,26 @@ import xml.etree.cElementTree as ET
 import pprint
 import re
 """
-check the "k" value for each "<tag>" and see if they can be valid keys in MongoDB,
-as well as see if there are any other potential problems.
+check the "k" value for each "<tag>" and see if they can be valid keys in 
+MongoDB, as well as see if there are any other potential problems.
 
 We have provided you with 3 regular expressions to check for certain patterns
-in the tags. As we saw in the quiz earlier, we would like to change the data model
-and expand the "addr:street" type of keys to a dictionary like this:
+in the tags. As we saw in the quiz earlier, we would like to change the data
+model and expand the "addr:street" type of keys to a dictionary like this:
 {"address": {"street": "Some value"}}
-So, we have to see if we have such tags, and if we have any tags with problematic characters.
-Please complete the function 'key_type'.
+So, we have to see if we have such tags, and if we have any tags with 
+problematic characters. Please complete the function 'key_type'.
 """
 
 
-lower = re.compile(r'^([a-z]|_)*$') # alphanumeric only
-lower_colon = re.compile(r'^([a-z]|_)*:([a-z]|_)*$') # alphanumeric strings separated by colon
+lower = re.compile(r'^([a-z]|_)*$') 
+lower_colon = re.compile(r'^([a-z]|_)*:([a-z]|_)*$') 
 problemchars = re.compile(r'[=\+/&<>;\'"\?%#$@\,\. \t\r\n]')
 
 
 def key_type(elem, keys):
     if elem.tag == "tag":
-        # ElementTree .attrib function return list of attributes in a dictionary
+        # ElementTree .attrib function return list of attributes in a dict
         for key, value in elem.attrib.iteritems():
             if key == 'k':
                 # use re.match to find pattern at beginning of string
@@ -55,6 +55,7 @@ keys = process_map(filein)
 pprint.pprint(keys)
 
 '''
-results: {'lower': 153584, 'lower_colon': 21432, 'other': 4675, 'problemchars': 0}
+results: {'lower': 153584, 'lower_colon': 21432, 'other': 4675, 
+'problemchars': 0}
 no problem chars
 '''
