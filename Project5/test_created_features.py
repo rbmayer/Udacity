@@ -33,15 +33,32 @@ df = pd.DataFrame(data_dict).transpose()
 df = df.drop(['TOTAL'])
 del data_dict['TOTAL']
 
-# replace nans with 0 for all except email_address as per Sheng's comment "For the financial features, the '-' symbol is assumed to be representative of 0-values" (https://discussions.udacity.com/t/enron-payment-dataset-missing-data-or-0/19068/2)
+# replace nans with 0 for all except email_address as per Sheng's comment 
+# "For the financial features, the '-' symbol is assumed to be representative 
+# of 0-values" (https://discussions.udacity.com/t/enron-payment-dataset-
+# missing-data-or-0/19068/2)
 # convert 'NaN's tp numpy nan
 df = df.replace('NaN', np.nan)
 # replace all NaNs in financial fields with 0
-df[['bonus', 'deferral_payments', 'deferred_income', 'director_fees', 'exercised_stock_options', 'expenses', 'loan_advances', 'long_term_incentive', 'other', 'restricted_stock',  'restricted_stock_deferred', 'salary', 'total_payments', 'total_stock_value']] = df[['bonus', 'deferral_payments', 'deferred_income', 'director_fees', 'exercised_stock_options', 'expenses', 'loan_advances', 'long_term_incentive', 'other', 'restricted_stock',  'restricted_stock_deferred', 'salary', 'total_payments', 'total_stock_value']].replace('NaN', 0)
+df[['bonus', 'deferral_payments', 'deferred_income', 'director_fees', 
+    'exercised_stock_options', 'expenses', 'loan_advances', 
+    'long_term_incentive', 'other', 'restricted_stock',  
+    'restricted_stock_deferred', 'salary', 'total_payments', 
+    'total_stock_value']] = df[['bonus', 'deferral_payments', 
+                                'deferred_income', 'director_fees', 
+                                'exercised_stock_options', 'expenses', 
+                                'loan_advances', 'long_term_incentive', 
+                                'other', 'restricted_stock',  
+                                'restricted_stock_deferred', 'salary', 
+                                'total_payments', 
+                                'total_stock_value']].replace('NaN', 0)
 
 # create dummy to indicate whether email data is available
 def has_emails(x):
-    if (np.isnan(x['to_messages']) & np.isnan(x['from_messages']) & np.isnan(x['from_poi_to_this_person']) & np.isnan(x['from_this_person_to_poi']) & np.isnan(x['shared_receipt_with_poi'])):
+    if (np.isnan(x['to_messages']) & np.isnan(x['from_messages']) & 
+    np.isnan(x['from_poi_to_this_person']) & 
+    np.isnan(x['from_this_person_to_poi']) & 
+    np.isnan(x['shared_receipt_with_poi'])):
         return 0
     else:
         return 1
@@ -49,18 +66,25 @@ def has_emails(x):
 df['inbox_available'] = df.apply(lambda x: has_emails(x), axis=1)
 
 # calculate medians of email features excluding missing observations
-from_msgs_median = np.median(df['from_messages'][np.isnan(df.from_messages)==False])
+from_msgs_median = np.median(df['from_messages']
+                               [np.isnan(df.from_messages)==False])
 to_msgs_median = np.median(df['to_messages'][np.isnan(df.to_messages)==False])
-from_poi_median = np.median(df['from_poi_to_this_person'][np.isnan(df.from_poi_to_this_person)==False])
-to_poi_median = np.median(df['from_this_person_to_poi'][np.isnan(df.from_this_person_to_poi)==False])
-shared_poi_median = np.median(df['shared_receipt_with_poi'][np.isnan(df.shared_receipt_with_poi)==False])
+from_poi_median = np.median(df['from_poi_to_this_person']
+                               [np.isnan(df.from_poi_to_this_person)==False])
+to_poi_median = np.median(df['from_this_person_to_poi']
+                               [np.isnan(df.from_this_person_to_poi)==False])
+shared_poi_median = np.median(df['shared_receipt_with_poi']
+                               [np.isnan(df.shared_receipt_with_poi)==False])
 
 # impute medians in place of missing email observations
 df['from_messages'] = df['from_messages'].fillna(from_msgs_median)
 df['to_messages'] = df['to_messages'].fillna(to_msgs_median)
-df['from_poi_to_this_person'] = df['from_poi_to_this_person'].fillna(from_poi_median)
-df['from_this_person_to_poi'] = df['from_this_person_to_poi'].fillna(to_poi_median)
-df['shared_receipt_with_poi'] = df['shared_receipt_with_poi'].fillna(shared_poi_median)
+df['from_poi_to_this_person'] = (df['from_poi_to_this_person'].
+                                    fillna(from_poi_median))
+df['from_this_person_to_poi'] = (df['from_this_person_to_poi'].
+                                    fillna(to_poi_median))
+df['shared_receipt_with_poi'] = (df['shared_receipt_with_poi'].
+                                    fillna(shared_poi_median))
 
 # Get initial features and labels
 labels = df['poi'].astype(float)
@@ -71,7 +95,9 @@ features_df = features_df.applymap(lambda x: float(x))
 feature_names = features_df.columns.values
 # get scaled features
 scaled_features = scale_features(features_df)
-scaled_features_df = pd.DataFrame(scaled_features, index = features_df.index, columns=feature_names)
+scaled_features_df = pd.DataFrame(scaled_features, 
+                                  index = features_df.index, 
+                                  columns=feature_names)
 
 # Get Lasso coefficients
 from sklearn.linear_model import Lasso
@@ -104,7 +130,8 @@ features_train, features_test, labels_train, labels_test = \
 from sklearn import svm, grid_search
 svr = svm.SVC()
 # change default gamma to 1/n_features
-parameters = {'kernel':('linear', 'rbf', 'poly'), 'C':[1, 10, 100], 'gamma':[0.0625, 1, 10], 'degree':[4, 5, 6, 7, 8]}
+parameters = {'kernel':('linear', 'rbf', 'poly'), 'C':[1, 10, 100], 
+              'gamma':[0.0625, 1, 10], 'degree':[4, 5, 6, 7, 8]}
 clf_GridSearch = grid_search.GridSearchCV(svr, parameters, scoring='f1')
 clf_GridSearch.fit(features_train, labels_train)
 clf_GridSearch.best_estimator_

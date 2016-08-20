@@ -66,38 +66,96 @@ max      49110078.000000         1.000000    1.000000    0.217341    1.001145
 '''
 
 # identify outliers in each category using R boxplot definition (>1.5X IQR)
-df[['bonus']][df.bonus > 1.5*(df.bonus.quantile(q=0.75)-df.bonus.quantile(q=0.25))].sort_values(by='bonus').count() # 19
-df[['poi']][(df.bonus > 1.5*(df.bonus.quantile(q=0.75)-df.bonus.quantile(q=0.25))) & (df.poi==True)].count() # 9
+df[['bonus']][df.bonus > 1.5*(df.bonus.quantile(q=0.75)-
+    df.bonus.quantile(q=0.25))].sort_values(by='bonus').count() # 19
+    
+df[['poi']][(df.bonus > 1.5*(df.bonus.quantile(q=0.75)-
+    df.bonus.quantile(q=0.25))) & (df.poi==True)].count() # 9
 
-df[['deferral_payments']][df.deferral_payments > 1.5*(df.deferral_payments.quantile(q=0.75)-df.deferral_payments.quantile(q=0.25))].sort_values(by='deferral_payments').count() # 35
-df[['poi']][(df.deferral_payments > 1.5*(df.deferral_payments.quantile(q=0.75)-df.deferral_payments.quantile(q=0.25))) & (df.poi==True)].count() # 4
+(df[['deferral_payments']][df.deferral_payments > 1.5*(
+    df.deferral_payments.quantile(q=0.75) - 
+    df.deferral_payments.quantile(q=0.25))].
+    sort_values(by='deferral_payments').count()) # 35
+    
+df[['poi']][(df.deferral_payments > 1.5*(df.deferral_payments.quantile(q=0.75)
+    - df.deferral_payments.quantile(q=0.25))) & (df.poi==True)].count() # 4
 
-df[['director_fees']][df.director_fees > 1.5*(df.director_fees.quantile(q=0.75)-df.director_fees.quantile(q=0.25))].sort_values(by='director_fees').count() # 16
-df[['poi']][(df.director_fees > 1.5*(df.director_fees.quantile(q=0.75)-df.director_fees.quantile(q=0.25))) & (df.poi==True)].count() # 0
+df[['director_fees']][df.director_fees > 1.5*(df.director_fees.quantile(
+    q=0.75)-df.director_fees.quantile(q=0.25))].sort_values(
+    by='director_fees').count() # 16
+df[['poi']][(df.director_fees > 1.5*(df.director_fees.quantile(q=0.75) - 
+    df.director_fees.quantile(q=0.25))) & (df.poi==True)].count() # 0
 
-df[['deferred_income']][df.deferred_income < (df.deferred_income.quantile(q=0.25)  - 1.5*(df.deferred_income.quantile(q=0.75) -df.deferred_income.quantile(q=0.25)))].sort_values(by='deferred_income').count() # 32
-df[['poi']][(df.deferred_income < df.deferred_income.quantile(q=0.25)  - 1.5*(df.deferred_income.quantile(q=0.75) -df.deferred_income.quantile(q=0.25))) & (df.poi==True)].count() # 9
+(df[['deferred_income']][df.deferred_income < (
+    df.deferred_income.quantile(q=0.25)  - 
+    1.5*(df.deferred_income.quantile(q=0.75) - 
+    df.deferred_income.quantile(q=0.25)))].
+    sort_values(by='deferred_income').count()) # 32
+    
+df[['poi']][(df.deferred_income < df.deferred_income.quantile(q=0.25) - 
+    1.5*(df.deferred_income.quantile(q=0.75) - 
+    df.deferred_income.quantile(q=0.25))) & (df.poi==True)].count() # 9
 
-df[['exercised_stock_options']][df.exercised_stock_options > 1.5*(df.exercised_stock_options.quantile(q=0.75)-df.exercised_stock_options.quantile(q=0.25))].sort_values(by='exercised_stock_options').count() # 26
-df[['poi']][(df.exercised_stock_options > 1.5*(df.exercised_stock_options.quantile(q=0.75)-df.exercised_stock_options.quantile(q=0.25))) & (df.poi==True)].count() # 6
+(df[['exercised_stock_options']][df.exercised_stock_options > 1.5*(
+    df.exercised_stock_options.quantile(q=0.75) - 
+    df.exercised_stock_options.quantile(q=0.25))].
+    sort_values(by='exercised_stock_options').count()) # 26
+    
+df[['poi']][(df.exercised_stock_options > 
+    1.5*(df.exercised_stock_options.quantile(q=0.75) - 
+    df.exercised_stock_options.quantile(q=0.25))) & (df.poi==True)].count() # 6
 
-df[['expenses']][df.expenses > 1.5*(df.expenses.quantile(q=0.75)-df.expenses.quantile(q=0.25))].sort_values(by='expenses').count() # 23
-df[['poi']][(df.expenses > 1.5*(df.expenses.quantile(q=0.75)-df.expenses.quantile(q=0.25))) & (df.poi==True)].count() # 5
+df[['expenses']][df.expenses > 1.5*(df.expenses.quantile(q=0.75) - 
+    df.expenses.quantile(q=0.25))].sort_values(by='expenses').count() # 23
+    
+df[['poi']][(df.expenses > 1.5*(df.expenses.quantile(q=0.75) - 
+    df.expenses.quantile(q=0.25))) & (df.poi==True)].count() # 5
 
-df[['loan_advances']][df.loan_advances > 1.5*(df.loan_advances.quantile(q=0.75)-df.loan_advances.quantile(q=0.25))].sort_values(by='loan_advances').count() # 3
-df[['poi']][(df.loan_advances > 1.5*(df.loan_advances.quantile(q=0.75)-df.loan_advances.quantile(q=0.25))) & (df.poi==True)].count() # 1
+(df[['loan_advances']][df.loan_advances > 
+    1.5*(df.loan_advances.quantile(q=0.75) - 
+    df.loan_advances.quantile(q=0.25))].
+    sort_values(by='loan_advances').count()) # 3
+    
+df[['poi']][(df.loan_advances > 
+    1.5*(df.loan_advances.quantile(q=0.75) - 
+    df.loan_advances.quantile(q=0.25))) & 
+    (df.poi==True)].count() # 1
 
-df[['long_term_incentive']][df.long_term_incentive > 1.5*(df.long_term_incentive.quantile(q=0.75)-df.long_term_incentive.quantile(q=0.25))].sort_values(by='long_term_incentive').count() # 22
-df[['poi']][(df.long_term_incentive > 1.5*(df.long_term_incentive.quantile(q=0.75)-df.long_term_incentive.quantile(q=0.25))) & (df.poi==True)].count() # 8
+(df[['long_term_incentive']][df.long_term_incentive > 
+    1.5*(df.long_term_incentive.quantile(q=0.75) - 
+    df.long_term_incentive.quantile(q=0.25))].
+    sort_values(by='long_term_incentive').count()) # 22
+    
+df[['poi']][(df.long_term_incentive > 
+    1.5*(df.long_term_incentive.quantile(q=0.75) - 
+    df.long_term_incentive.quantile(q=0.25))) & 
+    (df.poi==True)].count() # 8
 
-df[['other']][df.other > 1.5*(df.other.quantile(q=0.75)-df.other.quantile(q=0.25))].sort_values(by='other').count() # 29
-df[['poi']][(df.other > 1.5*(df.other.quantile(q=0.75)-df.other.quantile(q=0.25))) & (df.poi==True)].count() # 5
+df[['other']][df.other > 1.5*(df.other.quantile(q=0.75) - 
+    df.other.quantile(q=0.25))].sort_values(by='other').count() # 29
+    
+df[['poi']][(df.other > 1.5*(df.other.quantile(q=0.75) - 
+    df.other.quantile(q=0.25))) & (df.poi==True)].count() # 5
 
-df[['restricted_stock']][df.restricted_stock > 1.5*(df.restricted_stock.quantile(q=0.75)-df.restricted_stock.quantile(q=0.25))].sort_values(by='restricted_stock').count() # 25
-df[['poi']][(df.restricted_stock > 1.5*(df.restricted_stock.quantile(q=0.75)-df.restricted_stock.quantile(q=0.25))) & (df.poi==True)].count() # 8
+(df[['restricted_stock']][df.restricted_stock > 
+    1.5*(df.restricted_stock.quantile(q=0.75) - 
+    df.restricted_stock.quantile(q=0.25))].
+    sort_values(by='restricted_stock').count()) # 25
+    
+df[['poi']][(df.restricted_stock > 
+    1.5*(df.restricted_stock.quantile(q=0.75) - 
+    df.restricted_stock.quantile(q=0.25))) & (df.poi==True)].count() # 8
 
-df[['restricted_stock_deferred']][df.restricted_stock_deferred > 1.5*(df.restricted_stock_deferred.quantile(q=0.75)-df.restricted_stock_deferred.quantile(q=0.25))].sort_values(by='restricted_stock_deferred').count() # 2
-df[['restricted_stock_deferred']][df.restricted_stock_deferred < (df.restricted_stock_deferred.quantile(q=0.25) - 1.5*(df.restricted_stock_deferred.quantile(q=0.75)-df.restricted_stock_deferred.quantile(q=0.25)))].count() # 15
+(df[['restricted_stock_deferred']][df.restricted_stock_deferred > 
+    1.5*(df.restricted_stock_deferred.quantile(q=0.75) - 
+    df.restricted_stock_deferred.quantile(q=0.25))].
+    sort_values(by='restricted_stock_deferred').count()) # 2
+    
+(df[['restricted_stock_deferred']][df.restricted_stock_deferred < 
+    (df.restricted_stock_deferred.quantile(q=0.25) - 
+    1.5*(df.restricted_stock_deferred.quantile(q=0.75) - 
+    df.restricted_stock_deferred.quantile(q=0.25)))].count()) # 15
+    
 '''                  restricted_stock_deferred
 BELFER ROBERT                         44093
 BHATNAGAR SANJAY                   15456290'''
@@ -117,16 +175,34 @@ LOWRY CHARLES P                        -153686
 NOLES JAMES L                           -94556
 PIPER GREGORY F                        -409554
 REYNOLDS LAWRENCE                      -14026'''
-df[['poi']][(df.restricted_stock_deferred > 1.5*(df.restricted_stock_deferred.quantile(q=0.75)-df.restricted_stock_deferred.quantile(q=0.25))) & (df.poi==True)].count() # 0
 
-df[['salary']][df.salary > 1.5*(df.salary.quantile(q=0.75)-df.salary.quantile(q=0.25))].sort_values(by='salary').count() # 11
-df[['poi']][(df.salary > 1.5*(df.salary.quantile(q=0.75)-df.salary.quantile(q=0.25))) & (df.poi==True)].count() # 5
+df[['poi']][(df.restricted_stock_deferred > 
+    1.5*(df.restricted_stock_deferred.quantile(q=0.75) - 
+    df.restricted_stock_deferred.quantile(q=0.25))) & (df.poi==True)].count() 
+# 0
 
-df[['total_payments']][df.total_payments > 1.5*(df.total_payments.quantile(q=0.75)-df.total_payments.quantile(q=0.25))].sort_values(by='total_payments').count() # 21
-df[['poi']][(df.total_payments > 1.5*(df.total_payments.quantile(q=0.75)-df.total_payments.quantile(q=0.25))) & (df.poi==True)].count() # 4
+df[['salary']][df.salary > 1.5*(df.salary.quantile(q=0.75) - 
+    df.salary.quantile(q=0.25))].sort_values(by='salary').count() # 11
+    
+df[['poi']][(df.salary > 1.5*(df.salary.quantile(q=0.75) - 
+    df.salary.quantile(q=0.25))) & (df.poi==True)].count() # 5
 
-df[['total_stock_value']][df.total_stock_value > 1.5*(df.total_stock_value.quantile(q=0.75)-df.total_stock_value.quantile(q=0.25))].sort_values(by='total_stock_value').count() # 30
-df[['poi']][(df.total_stock_value > 1.5*(df.total_stock_value.quantile(q=0.75)-df.total_stock_value.quantile(q=0.25))) & (df.poi==True)].count() # 7
+(df[['total_payments']][df.total_payments > 
+    1.5*(df.total_payments.quantile(q=0.75) - 
+    df.total_payments.quantile(q=0.25))].
+    sort_values(by='total_payments').count()) # 21
+    
+df[['poi']][(df.total_payments > 1.5*(df.total_payments.quantile(q=0.75) - 
+    df.total_payments.quantile(q=0.25))) & (df.poi==True)].count() # 4
+
+(df[['total_stock_value']][df.total_stock_value > 
+    1.5*(df.total_stock_value.quantile(q=0.75) - 
+    df.total_stock_value.quantile(q=0.25))].
+    sort_values(by='total_stock_value').count()) # 30
+    
+df[['poi']][(df.total_stock_value > 
+    1.5*(df.total_stock_value.quantile(q=0.75) - 
+    df.total_stock_value.quantile(q=0.25))) & (df.poi==True)].count() # 7
 
 # 1d plots
 plt.figure()
@@ -170,16 +246,21 @@ plt.plot(df['restricted_stock_deferred'].sort(inplace=False), 'bo')
 plt.ylabel('restricted_stock_deferred')
 
 plt.figure()
-plt.plot(df[['salary', 'director_fees']].sort(columns=['salary', 'director_fees'], inplace=False))
+plt.plot(df[['salary', 'director_fees']].sort(columns=['salary', 
+                                                       'director_fees'], 
+                                                       inplace=False))
 plt.ylabel('salary/director fees') # salary has S-curve shape
 
 plt.figure()
 plt.plot(df['from_poi'].sort(inplace=False), 'bo')
-plt.ylabel('from_poi')  # curve is exponential rather than normal - better to use median than mean for imputation
+plt.ylabel('from_poi')  # curve is exponential rather than normal - 
+# better to use median than mean for imputation
 
 plt.figure()
 plt.plot(df['total_payments'].sort(inplace=False), 'bo')
-plt.ylabel('total_payments')  # Ken Lay is massive outlier (driven by loan_advances) but still potentially consistent with exponential distribution
+plt.ylabel('total_payments')  # Ken Lay is massive outlier 
+# (driven by loan_advances) but still potentially consistent with 
+# exponential distribution
 
 plt.figure()
 plt.plot(df['total_stock_value'].sort(inplace=False), 'bo')

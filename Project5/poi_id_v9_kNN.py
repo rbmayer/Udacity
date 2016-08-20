@@ -35,9 +35,15 @@ features_df = features_df.applymap(lambda x: float(x))
 feature_names = features_df.columns.values
 # get scaled features
 scaled_features = scale_features(features_df)
-scaled_features_df = pd.DataFrame(scaled_features, index = features_df.index, columns=features_df.columns.values)
+scaled_features_df = pd.DataFrame(scaled_features, 
+                                  index = features_df.index, 
+                                  columns=features_df.columns.values)
 # Get features
-features_list = select_features_with_lasso(scaled_features, feature_names, labels, coefficient_threshold=0.001, my_alpha=0.015)
+features_list = select_features_with_lasso(scaled_features, 
+                                           feature_names, 
+                                           labels, 
+                                           coefficient_threshold=0.001, 
+                                           my_alpha=0.015)
 
 ### Task 2: Remove outliers
 ### Task 3: Create new feature(s)
@@ -73,7 +79,9 @@ features_train, features_test, labels_train, labels_test = \
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn import grid_search
 knn = KNeighborsClassifier()
-parameters = {'n_neighbors':[2, 5, 10, 20, 40], 'weights':('distance', 'uniform'), 'metric':('euclidean', 'manhattan', 'chebyshev')}
+parameters = {'n_neighbors':[2, 5, 10, 20, 40], 
+              'weights':('distance', 'uniform'), 
+              'metric':('euclidean', 'manhattan', 'chebyshev')}
 clf_GridSearch = grid_search.GridSearchCV(knn, parameters, scoring='f1')
 clf_GridSearch.fit(features_train, labels_train)
 clf_GridSearch.best_estimator_

@@ -36,22 +36,39 @@ features_df = features_df.applymap(lambda x: float(x))
 feature_names = features_df.columns.values
 # run logistic transform on exponentially distributed features: 'bonus', 'deferred_income', 'director_fees', 'exercised_stock_options', 'expenses', 'long_term_incentive', 'other', 'restricted_stock', 'salary', 'total_payments', 'total_stock_value', 'to_poi', 'from_poi'
 features_df['bonus'] = features_df['bonus'].apply(lambda x: np.log10(x+1))
-features_df['deferred_income'] = features_df['deferred_income'].apply(lambda x: np.log10(x+1-min(features_df['deferred_income'])))
-features_df['director_fees'] = features_df['director_fees'].apply(lambda x: np.log10(x+1))
-features_df['exercised_stock_options'] = features_df['exercised_stock_options'].apply(lambda x: np.log10(x+1))
-features_df['expenses'] = features_df['expenses'].apply(lambda x: np.log10(x+1))
-features_df['long_term_incentive'] = features_df['long_term_incentive'].apply(lambda x: np.log10(x+1))
-features_df['restricted_stock'] = features_df['restricted_stock'].apply(lambda x: np.log10(x+1-min(features_df['restricted_stock'])))
+features_df['deferred_income'] = (
+    features_df['deferred_income'].apply(lambda x: 
+    np.log10(x+1-min(features_df['deferred_income']))))
+features_df['director_fees'] = (
+    features_df['director_fees'].apply(lambda x: np.log10(x+1)))
+features_df['exercised_stock_options'] = (
+    features_df['exercised_stock_options'].apply(lambda x: np.log10(x+1)))
+features_df['expenses'] = (
+    features_df['expenses'].apply(lambda x: np.log10(x+1)))
+features_df['long_term_incentive'] = (
+    features_df['long_term_incentive'].apply(lambda x: np.log10(x+1)))
+features_df['restricted_stock'] = (
+    features_df['restricted_stock'].apply(lambda x: 
+    np.log10(x+1-min(features_df['restricted_stock']))))
 features_df['salary'] = features_df['salary'].apply(lambda x: np.log10(x+1))
-features_df['total_payments'] = features_df['total_payments'].apply(lambda x: np.log10(x+1))
-features_df['total_stock_value'] = features_df['total_stock_value'].apply(lambda x: np.log10(x+1-min(features_df['total_stock_value'])))
+features_df['total_payments'] = (
+    features_df['total_payments'].apply(lambda x: np.log10(x+1)))
+features_df['total_stock_value'] = (
+    features_df['total_stock_value'].apply(lambda x: 
+    np.log10(x+1-min(features_df['total_stock_value']))))
 features_df['to_poi'] = features_df['bonus'].apply(lambda x: np.log10(x+1))
 features_df['from_poi'] = features_df['bonus'].apply(lambda x: np.log10(x+1))
 # get scaled features
 scaled_features = scale_features(features_df)
-scaled_features_df = pd.DataFrame(scaled_features, index = features_df.index, columns=features_df.columns.values)
+scaled_features_df = pd.DataFrame(scaled_features, 
+                                  index = features_df.index, 
+                                  columns=features_df.columns.values)
 # Get features
-features_list = select_features_with_lasso(scaled_features, feature_names, labels, coefficient_threshold=0.001, my_alpha=0.015)
+features_list = select_features_with_lasso(scaled_features, 
+                                           feature_names, 
+                                           labels, 
+                                           coefficient_threshold=0.001, 
+                                           my_alpha=0.015)
 
 ### Task 2: Remove outliers
 ### Task 3: Create new feature(s)

@@ -35,9 +35,15 @@ features_df = features_df.applymap(lambda x: float(x))
 feature_names = features_df.columns.values
 # get scaled features
 scaled_features = scale_features(features_df)
-scaled_features_df = pd.DataFrame(scaled_features, index = features_df.index, columns=features_df.columns.values)
+scaled_features_df = pd.DataFrame(scaled_features, 
+                                  index = features_df.index, 
+                                  columns=features_df.columns.values)
 # Get features
-features_list = select_features_with_lasso(scaled_features, feature_names, labels, coefficient_threshold=0.001, my_alpha=0.015)
+features_list = select_features_with_lasso(scaled_features, 
+                                           feature_names, 
+                                           labels, 
+                                           coefficient_threshold=0.001, 
+                                           my_alpha=0.015)
 
 ### Task 2: Remove outliers
 ### Task 3: Create new feature(s)
@@ -72,16 +78,22 @@ features_train, features_test, labels_train, labels_test = \
 
 from sklearn import tree, grid_search
 tr = tree.DecisionTreeClassifier()
-parameters = {'min_samples_split':[2, 10, 50, 100], 'criterion':('gini', 'entropy')}
+parameters = {'min_samples_split':[2, 10, 50, 100], 
+              'criterion':('gini', 'entropy')}
 clf_GridSearch = grid_search.GridSearchCV(tr, parameters, scoring='f1')
 clf_GridSearch.fit(features_train, labels_train)
 clf_GridSearch.best_estimator_
 
-clf = tree.DecisionTreeClassifier(class_weight=None, criterion='entropy', max_depth=None,
-            max_features=None, max_leaf_nodes=None, min_samples_leaf=1,
-            min_samples_split=10, min_weight_fraction_leaf=0.0,
-            presort=False, random_state=None, splitter='best')
-
+clf = tree.DecisionTreeClassifier(class_weight=None, criterion='entropy',
+                                  max_depth=None,
+                                  max_features=None, 
+                                  max_leaf_nodes=None, 
+                                  min_samples_leaf=1,
+                                  min_samples_split=10, 
+                                  min_weight_fraction_leaf=0.0,
+                                  presort=False, 
+                                  random_state=None, 
+                                  splitter='best')
 
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
 ### check your results. You do not need to change anything below, but make sure

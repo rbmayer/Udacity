@@ -27,15 +27,33 @@ def prepare_data_with_transformed_emails(data_dict):
     df = df.drop(['TOTAL'])
     del data_dict['TOTAL']
 
-    # replace nans with 0 for all except email_address as per Sheng's comment "For the financial features, the '-' symbol is assumed to be representative of 0-values" (https://discussions.udacity.com/t/enron-payment-dataset-missing-data-or-0/19068/2)
+    # replace nans with 0 for all except email_address as per Sheng's comment 
+    # "For the financial features, the '-' symbol is assumed to be 
+    # representative of 0-values" 
+    # (https://discussions.udacity.com/t/enron-payment-dataset-missing-data-or-0/19068/2)
     # convert 'NaN's tp numpy nan
     df = df.replace('NaN', np.nan)
     # replace all NaNs in financial fields with 0
-    df[['bonus', 'deferral_payments', 'deferred_income', 'director_fees', 'exercised_stock_options', 'expenses', 'loan_advances', 'long_term_incentive', 'other', 'restricted_stock',  'restricted_stock_deferred', 'salary', 'total_payments', 'total_stock_value']] = df[['bonus', 'deferral_payments', 'deferred_income', 'director_fees', 'exercised_stock_options', 'expenses', 'loan_advances', 'long_term_incentive', 'other', 'restricted_stock',  'restricted_stock_deferred', 'salary', 'total_payments', 'total_stock_value']].replace('NaN', 0)
+    df[['bonus', 'deferral_payments', 'deferred_income', 'director_fees', 
+        'exercised_stock_options', 'expenses', 'loan_advances', 
+        'long_term_incentive', 'other', 'restricted_stock',  
+        'restricted_stock_deferred', 'salary', 'total_payments', 
+        'total_stock_value']] = df[['bonus', 'deferral_payments', 
+                                    'deferred_income', 'director_fees', 
+                                    'exercised_stock_options', 'expenses', 
+                                    'loan_advances', 'long_term_incentive', 
+                                    'other', 'restricted_stock',  
+                                    'restricted_stock_deferred', 'salary', 
+                                    'total_payments', 
+                                    'total_stock_value']].replace('NaN', 0)
 
     # create dummy to indicate whether email data is available
     def has_emails(x):
-        if (np.isnan(x['to_messages']) & np.isnan(x['from_messages']) & np.isnan(x['from_poi_to_this_person']) & np.isnan(x['from_this_person_to_poi']) & np.isnan(x['shared_receipt_with_poi'])):
+        if (np.isnan(x['to_messages']) & 
+        np.isnan(x['from_messages']) & 
+        np.isnan(x['from_poi_to_this_person']) & 
+        np.isnan(x['from_this_person_to_poi']) & 
+        np.isnan(x['shared_receipt_with_poi'])):
             return 0
         else:
             return 1
@@ -43,16 +61,26 @@ def prepare_data_with_transformed_emails(data_dict):
     df['inbox_available'] = df.apply(lambda x: has_emails(x), axis=1)
 
     # transform email features into proportions
-    df['from_poi'] = df.apply(lambda row: np.NaN if (np.isnan(row['from_messages']) & np.isnan(row['to_messages'])) else row['from_this_person_to_poi']/row['from_messages'], axis=1)
+    df['from_poi'] = df.apply(lambda row: np.NaN if 
+        (np.isnan(row['from_messages']) & 
+        np.isnan(row['to_messages'])) 
+        else row['from_this_person_to_poi']/row['from_messages'], axis=1)
 
-    df['to_poi'] = df.apply(lambda row: np.NaN if (np.isnan(row['from_messages']) & np.isnan(row['to_messages'])) else row['from_poi_to_this_person']/row['to_messages'], axis=1)
+    df['to_poi'] = df.apply(lambda row: np.NaN if 
+        (np.isnan(row['from_messages']) & 
+        np.isnan(row['to_messages'])) 
+        else row['from_poi_to_this_person']/row['to_messages'], axis=1)
 
-    df['shared_poi'] = df.apply(lambda row: np.NaN if (np.isnan(row['from_messages']) & np.isnan(row['to_messages'])) else row['shared_receipt_with_poi']/row['to_messages'], axis=1)
+    df['shared_poi'] = df.apply(lambda row: np.NaN if 
+        (np.isnan(row['from_messages']) & 
+        np.isnan(row['to_messages'])) 
+        else row['shared_receipt_with_poi']/row['to_messages'], axis=1)
 
     # calculate medians of email features excluding missing observations
     from_poi_median = np.median(df['from_poi'][np.isnan(df.from_poi)==False])
     to_poi_median = np.median(df['to_poi'][np.isnan(df.to_poi)==False])
-    shared_poi_median = np.median(df['shared_poi'][np.isnan(df.shared_poi)==False])
+    shared_poi_median = np.median(
+        df['shared_poi'][np.isnan(df.shared_poi)==False])
 
     # impute medians in place of missing email observations
     df['from_poi'] = df['from_poi'].fillna(from_poi_median)
@@ -60,7 +88,9 @@ def prepare_data_with_transformed_emails(data_dict):
     df['shared_poi'] = df['shared_poi'].fillna(shared_poi_median)
 
     # remove raw msg indicators
-    df.drop(['from_this_person_to_poi', 'from_poi_to_this_person', 'to_messages', 'from_messages', 'shared_receipt_with_poi'], axis=1, inplace=True)
+    df.drop(['from_this_person_to_poi', 'from_poi_to_this_person', 
+             'to_messages', 'from_messages', 'shared_receipt_with_poi'], 
+             axis=1, inplace=True)
     return df
 
 def scale_features(features):
@@ -71,15 +101,19 @@ def scale_features(features):
     features_scaled = scaler.transform(features)
     return features_scaled
 
-def select_features_with_lasso(features, feature_names, labels, coefficient_threshold=0.001, my_alpha=0.00001):
+def select_features_with_lasso(features, feature_names, labels, 
+                               coefficient_threshold=0.001, my_alpha=0.00001):
     import pandas as pd
     # Create Lasso regression object with parameters
     from sklearn.linear_model import Lasso
-    regression = Lasso(alpha=my_alpha, fit_intercept=False, max_iter=100000, selection='random', random_state=52, tol=0.01)  # fit_intercept=False because data is already centered
+    regression = Lasso(alpha=my_alpha, fit_intercept=False, max_iter=100000, 
+                       selection='random', random_state=52, tol=0.01)  
+                       # fit_intercept=False because data is already centered
     # Fit regression
     regression.fit(features, labels)
     # Evaluate coefficients
-    Lasso_coef = pd.DataFrame({'coefs': regression.coef_, 'features': feature_names})
+    Lasso_coef = pd.DataFrame({'coefs': regression.coef_, 
+                               'features': feature_names})
     # Select features based on coefficient value above threshold
     Best_coef = Lasso_coef[Lasso_coef['coefs'].abs() > coefficient_threshold]
     feature_list = ['poi']
@@ -100,9 +134,15 @@ features_df = features_df.applymap(lambda x: float(x))
 feature_names = features_df.columns.values
 # get scaled features
 scaled_features = scale_features(features_df)
-scaled_features_df = pd.DataFrame(scaled_features, index = features_df.index, columns=features_df.columns.values)
+scaled_features_df = pd.DataFrame(scaled_features, 
+                                  index = features_df.index, 
+                                  columns=features_df.columns.values)
 # Get features
-features_list = select_features_with_lasso(scaled_features, feature_names, labels, coefficient_threshold=0.001, my_alpha=0.015)
+features_list = select_features_with_lasso(scaled_features, 
+                                           feature_names, 
+                                           labels, 
+                                           coefficient_threshold=0.001, 
+                                           my_alpha=0.015)
 
 ### Store to my_dataset for easy export below.
 scaled_features_df['poi'] = df['poi']
@@ -122,7 +162,10 @@ features_train, features_test, labels_train, labels_test = \
 from sklearn import svm, grid_search
 svr = svm.SVC()
 # change default gamma to 1/n_features
-parameters = {'kernel':('linear', 'rbf', 'poly'), 'C':[1, 10, 100], 'gamma':[0.125, 1, 10], 'degree':[4, 5, 6, 7, 8]}
+parameters = {'kernel':('linear', 'rbf', 'poly'), 
+              'C':[1, 10, 100], 
+              'gamma':[0.125, 1, 10], 
+              'degree':[4, 5, 6, 7, 8]}
 clf_GridSearch = grid_search.GridSearchCV(svr, parameters, scoring='f1')
 clf_GridSearch.fit(features_train, labels_train)
 clf_GridSearch.best_estimator_
